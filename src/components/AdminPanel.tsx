@@ -97,11 +97,57 @@ const resizeImage = (file: File, maxWidth = 1000, maxHeight = 1000): Promise<str
 };
 
 export default function AdminPanel({ items, setItems, settings, setSettings, onResetData }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<'content' | 'theme' | 'seo'>('content');
+  const [activeTab, setActiveTab] = useState<'content' | 'theme' | 'seo' | 'sync'>('content');
   const [editingItem, setEditingItem] = useState<Partial<PortfolioItem> | null>(null);
   const [formMediaType, setFormMediaType] = useState<'photo' | 'video'>('photo');
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+
+  const generateInitialDataCode = (): string => {
+    // Generate clean output formatting
+    const formattedItems = JSON.stringify(items, null, 2);
+    const formattedSettings = JSON.stringify(settings, null, 2);
+    return `/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { PortfolioItem, SiteSettings } from '../types';
+
+export const INITIAL_ITEMS: PortfolioItem[] = ${formattedItems};
+
+export const INITIAL_SETTINGS: SiteSettings = ${formattedSettings};
+`;
+  };
+
+  const handleDownloadInitialData = () => {
+    try {
+      const code = generateInitialDataCode();
+      const blob = new Blob([code], { type: 'text/typescript;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'initialData.ts';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      triggerToast('initialData.ts 파일 다운로드가 완료되었습니다.');
+    } catch (err) {
+      console.error(err);
+      triggerToast('파일 다운로드 실패: ' + String(err));
+    }
+  };
+
+  const handleCopyInitialData = () => {
+    try {
+      const code = generateInitialDataCode();
+      navigator.clipboard.writeText(code);
+      triggerToast('동기화용 TypeScript 코드가 클립보드에 복사되었습니다!');
+    } catch {
+      triggerToast('클립보드 복사 실패. 텍스트를 선택하여 직접 복사해 주세요.');
+    }
+  };
   
   // Custom confirmation modal state for deletion
   const [deleteConfirmState, setDeleteConfirmState] = useState<{ isOpen: boolean; id: string; title: string }>({
@@ -699,6 +745,16 @@ export default function AdminPanel({ items, setItems, settings, setSettings, onR
           }`}
         >
           <Globe className="h-4 w-4" /> SEO 및 소셜 미리보기
+        </button>
+        <button
+          onClick={() => setActiveTab('sync')}
+          className={`flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-semibold transition-all ${
+            activeTab === 'sync'
+              ? 'border-[var(--accent-color)] text-amber-600 font-bold'
+              : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <RefreshCw className="h-4 w-4" /> 깃허브 배포 동기화
         </button>
       </div>
 
@@ -1377,6 +1433,87 @@ export default function AdminPanel({ items, setItems, settings, setSettings, onR
                 <p><span className="text-blue-400">{"<meta property=\"og:title\" content=\""}</span>{settings.siteTitle}{"\" />"}</p>
                 <p><span className="text-blue-400">{"<meta property=\"og:description\" content=\""}</span>{items[0]?.summary || settings.siteSubtitle}{"\" />"}</p>
                 <p><span className="text-blue-400">{"<meta property=\"og:url\" content=\""}</span>{"https://sallyslaw-design.com"}{"\" />"}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: GITHUB DEPLOYMENT & DATA SYNC */}
+        {activeTab === 'sync' && (
+          <div className="space-y-6 animate-fadeIn">
+            <div className="rounded-xl border border-amber-250 bg-amber-50/20 p-5 space-y-4">
+              <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                💡 깃허브 배포 시 포트폴리오 정보를 영구 보존하는 방법
+              </h4>
+              
+              <div className="text-xs text-gray-600 space-y-3 leading-relaxed">
+                <p>
+                  현재 관리자 화면에서 추가/수정하시고 등록하거나 변경하신 <strong>포트폴리오 내용 및 정렬 순서</strong>는 
+                  관리자 님의 현재 웹 브라우저(로컬 저장소: <code>localStorage</code>)에 아주 안전하게 임시 보관 중입니다. 
+                  따라서 관리자 님 기기에서는 수정한 내용이 즉시 완벽하게 보입니다.
+                </p>
+                <p className="p-3 bg-white border border-amber-100 rounded-lg text-[11px] text-amber-800 font-medium">
+                  ⚠️ <strong>주의하십시오:</strong> 서버 데이터베이스 없이 <strong>평생 100% 무료 서버 비용</strong>으로 구동되는 
+                  정적 정형 웹사이트 특성상, 일반 방문객들이나 다른 PC에서 이 변경된 포트폴리오를 똑같이 감상하려면 
+                  소스코드 파일 내부에 수정한 데이터를 영구히 입혀주셔야 합니다. 방법은 단 20초 만에 완료될 만큼 간단합니다!
+                </p>
+              </div>
+
+              {/* Step list instruction panels */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                <div className="p-3.5 bg-gray-50 border border-gray-200/60 rounded-xl space-y-1.5 shadow-2xs">
+                  <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-amber-400 text-gray-950 text-[10px] font-black">1</span>
+                  <h5 className="text-[11px] font-bold text-gray-800">동기화 코드 내려받기</h5>
+                  <p className="text-[10px] text-gray-500 leading-relaxed">
+                    아래 <strong className="text-gray-800">[initialData.ts 파일 즉시 다운로드]</strong> 단추를 클릭해 현재 변경사항이 반영된 최신 소스 파일을 PC에 다운로드합니다.
+                  </p>
+                </div>
+                
+                <div className="p-3.5 bg-gray-50 border border-gray-200/60 rounded-xl space-y-1.5 shadow-2xs">
+                  <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-gray-200 text-gray-700 text-[10px] font-black">2</span>
+                  <h5 className="text-[11px] font-bold text-gray-800">폴더에 파일 덮어쓰기</h5>
+                  <p className="text-[10px] text-gray-500 leading-relaxed">
+                    내려받은 파일로 프로젝트의 <strong><code>src/data/initialData.ts</code></strong> 파일을 덮어씌웁니다. 
+                    혹은 본 대화창에 파일을 드래그하여 코드를 교체하도록 저에게 명령을 내리셔도 됩니다!
+                  </p>
+                </div>
+
+                <div className="p-3.5 bg-gray-50 border border-gray-200/60 rounded-xl space-y-1.5 shadow-2xs">
+                  <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-gray-200 text-gray-700 text-[10px] font-black">3</span>
+                  <h5 className="text-[11px] font-bold text-gray-800">깃허브 퍼블리싱 전송</h5>
+                  <p className="text-[10px] text-gray-500 leading-relaxed">
+                    파일 덮어쓰기 완료 후 변경 사항을 커밋하고 <strong>깃허브(GitHub)에 푸시(Push)</strong> 하십시오. 세팅에 따라 몇 초 뒤 사이트가 재배포되어 모든 전세계 유저에게 완벽히 반영됩니다.
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap gap-2.5 justify-center pt-4 border-t border-gray-100 mt-4">
+                <button
+                  type="button"
+                  onClick={handleDownloadInitialData}
+                  className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold px-5 py-2.5 rounded-lg shadow-md transition-all text-xs cursor-pointer"
+                >
+                  📥 initialData.ts 파일 즉시 다운로드
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyInitialData}
+                  className="inline-flex items-center gap-2 bg-gray-800 hover:bg-gray-950 text-white font-bold px-5 py-2.5 rounded-lg shadow-md transition-all text-xs cursor-pointer"
+                >
+                  📋 TypeScript 소스 전체 복사하기
+                </button>
+              </div>
+            </div>
+
+            {/* Simulated Live Code Preview */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-mono tracking-wider text-gray-400">실시간 데이터 빌더 내보내기 결과 프로타입 (src/data/initialData.ts)</p>
+                <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">코드 자동 패키징 완료</span>
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-gray-900 p-4 font-mono text-[10px] text-emerald-400 overflow-x-auto max-h-[250px] leading-relaxed whitespace-pre select-all">
+                {generateInitialDataCode()}
               </div>
             </div>
           </div>
