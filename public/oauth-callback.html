@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>구글 드라이브 인증 완료</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      background-color: #F9FAFB;
+      color: #374151;
+    }
+    .card {
+      text-align: center;
+      padding: 2.5rem;
+      background: white;
+      border-radius: 1rem;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+      max-width: 400px;
+      width: 90%;
+    }
+    h2 {
+      color: #111827;
+      margin-top: 0;
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+    p {
+      color: #6B7280;
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+    .spinner {
+      border: 3px solid #E5E7EB;
+      border-top: 3px solid #F3C623;
+      border-radius: 50%;
+      width: 28px;
+      height: 28px;
+      animation: spin 1s linear infinite;
+      margin: 1.5rem auto 0;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>구글 드라이브 연결 완료</h2>
+    <p>포트폴리오 업로더에 드라이브 사진 권한이 바르게 주어졌습니다. 곧 창이 자동으로 닫힙니다.</p>
+    <div class="spinner"></div>
+  </div>
+
+  <script>
+    // Extract access token and parameters from hash fragment
+    const hash = window.location.hash;
+    if (hash) {
+      const params = {};
+      const pairs = hash.substring(1).split('&');
+      for (let i = 0; i < pairs.length; i++) {
+        const pair = pairs[i].split('=');
+        params[decodeURIComponent(pair[0])] = decodeURIComponent(pair[1] || '');
+      }
+
+      const accessToken = params.access_token;
+      if (accessToken) {
+        if (window.opener) {
+          // Send the access token to the parent React application
+          window.opener.postMessage({
+            type: 'GOOGLE_OAUTH_SUCCESS',
+            accessToken: accessToken,
+            expiresIn: params.expires_in
+          }, '*');
+          
+          // Secure closing delay
+          setTimeout(() => {
+            window.close();
+          }, 800);
+        } else {
+          console.error('부모 창(Opener)을 찾을 수 없습니다.');
+          document.querySelector('p').innerText = '인증 토큰은 추출되었으나 연동 창을 찾을 수 없습니다. 원래 화면으로 돌아가 다시 시도해 주세요.';
+        }
+      } else {
+        console.error('인증 토큰(access_token)이 해시에 없습니다.');
+        document.querySelector('p').innerText = '인증에 실패했습니다. 올바른 계정으로 로그인했는지 확인해 주세요.';
+      }
+    } else {
+      console.error('URL 해시 조각이 없습니다.');
+      // If there's an error query parameter in search instead of hash
+      const searchParams = new URLSearchParams(window.location.search);
+      const errorMsg = searchParams.get('error');
+      if (errorMsg) {
+        document.querySelector('p').innerText = '인증 오류: ' + errorMsg;
+      }
+    }
+  </script>
+</body>
+</html>

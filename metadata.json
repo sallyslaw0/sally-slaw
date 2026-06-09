@@ -1,0 +1,6 @@
+{
+  "name": "샐리의 법칙",
+  "description": "디자인 감각이 돋보이는 샐리의 법칙(Sally's Law) 프리미엄 포트폴리오 웹사이트",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
