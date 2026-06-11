@@ -35,24 +35,30 @@ declare global {
 
 // 환경 변수로부터 Firebase 초기화 설정 로드
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
 };
 
 // Firebase 설정이 유효한지 검증하는 헬퍼
 export function isFirebaseConfigValid(): boolean {
   const cfg = firebaseConfig;
-  // 빈 문자열이거나 플레이스홀더 껍데기가 남아있는 경우 비활성화 처리
+  // 빈 문자열이거나 플레이스홀더 껍데기가 남아있는 경우, 혹은 잘못 주입된 문자열형 undefined/null 체크
   if (
     !cfg.apiKey || 
     !cfg.projectId || 
     cfg.apiKey.trim() === '' || 
+    cfg.projectId.trim() === '' || 
+    cfg.apiKey === 'undefined' ||
+    cfg.projectId === 'undefined' ||
+    cfg.apiKey === 'null' ||
+    cfg.projectId === 'null' ||
     cfg.apiKey.includes('[') || 
-    cfg.projectId.includes('[')
+    cfg.projectId.includes('[') ||
+    cfg.apiKey.includes('placeholder')
   ) {
     return false;
   }
