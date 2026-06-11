@@ -56,12 +56,9 @@ export default function App() {
         // 1. Firebase에서 포트폴리오 로드
         let firebaseItems = await fetchPortfolioItemsFromFirebase();
         
-        // 만약 파이어베이스가 최초 상태라 비어있다면, 디폴트 데이터 자동 업로드(마이그레이션)
+        // 만약 파이어베이스가 최초 상태라 비어있다면, 디폴트 데이터를 클라이언트 상태에 로컬 폴백으로 세팅
         if (!firebaseItems || firebaseItems.length === 0) {
-          console.log("Firebase is empty. Migrating default portfolio items...");
-          for (const item of INITIAL_ITEMS) {
-            await savePortfolioItemToFirebase(item);
-          }
+          console.log("Firebase is empty. Falling back to default portfolio items on client-side.");
           firebaseItems = INITIAL_ITEMS;
         }
         setItems(firebaseItems);
@@ -69,10 +66,9 @@ export default function App() {
         // 2. Firebase에서 글로벌 디자인 설정 로드
         let firebaseSettings = await fetchSiteSettingsFromFirebase();
         
-        // 만약 설정이 비어있다면, 디폴트 설정 파이어베이스에 입력
+        // 만약 설정이 비어있다면, 디폴트 설정을 클라이언트 상태에 로컬 폴백으로 세팅
         if (!firebaseSettings) {
-          console.log("Firebase setting is empty. Migrating default settings...");
-          await saveSiteSettingsToFirebase(INITIAL_SETTINGS);
+          console.log("Firebase setting is empty. Falling back to default settings on client-side.");
           firebaseSettings = INITIAL_SETTINGS;
         }
         setSettings(firebaseSettings);
