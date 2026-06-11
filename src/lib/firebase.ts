@@ -33,35 +33,103 @@ declare global {
   }
 }
 
-// 환경 변수로부터 Firebase 초기화 설정 로드
+// 환경 변수나 치환된 글로벌 상수를 안전하게 로드하는 도우미 함수 (이중 폴백 구조)
+const getSafeEnvValue = (metaVal: any, fallbackName: string): string => {
+  // 1. 전달된 metaVal (import.meta.env.*) 검증
+  if (metaVal && typeof metaVal === 'string') {
+    const trimmed = metaVal.trim();
+    if (
+      trimmed !== '' &&
+      trimmed !== 'undefined' &&
+      trimmed !== 'null' &&
+      !trimmed.includes('[') &&
+      !trimmed.includes('placeholder')
+    ) {
+      return trimmed;
+    }
+  }
+
+  // 2. process.env를 통한 런타임/빌드타임 직접 바인딩 확인 (브라우저 Uncaught ReferenceError 방지용 타입 가드)
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      const procVal = (process.env as any)[fallbackName];
+      if (procVal && typeof procVal === 'string') {
+        const trimmed = procVal.trim();
+        if (
+          trimmed !== '' &&
+          trimmed !== 'undefined' &&
+          trimmed !== 'null' &&
+          !trimmed.includes('[') &&
+          !trimmed.includes('placeholder')
+        ) {
+          return trimmed;
+        }
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  // 3. 브라우저 글로벌 window 객체에 혹시 모를 바인딩 확인
+  try {
+    if (typeof window !== 'undefined') {
+      const winVal = (window as any)[fallbackName] || (window as any).env?.[fallbackName];
+      if (winVal && typeof winVal === 'string') {
+        const trimmed = winVal.trim();
+        if (
+          trimmed !== '' &&
+          trimmed !== 'undefined' &&
+          trimmed !== 'null' &&
+          !trimmed.includes('[') &&
+          !trimmed.includes('placeholder')
+        ) {
+          return trimmed;
+        }
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  return '';
+};
+
+// 환경 변수로부터 Firebase 초기화 설정 로드 (고정된 텍스트 치환 및 유연한 런타임 매핑)
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+  apiKey: getSafeEnvValue(import.meta.env.VITE_FIREBASE_API_KEY, 'VITE_FIREBASE_API_KEY'),
+  authDomain: getSafeEnvValue(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN, 'VITE_FIREBASE_AUTH_DOMAIN'),
+  projectId: getSafeEnvValue(import.meta.env.VITE_FIREBASE_PROJECT_ID, 'VITE_FIREBASE_PROJECT_ID'),
+  storageBucket: getSafeEnvValue(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET, 'VITE_FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: getSafeEnvValue(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID, 'VITE_FIREBASE_MESSAGING_SENDER_ID'),
+  appId: getSafeEnvValue(import.meta.env.VITE_FIREBASE_APP_ID, 'VITE_FIREBASE_APP_ID'),
 };
 
 // Firebase 설정이 유효한지 검증하는 헬퍼
 export function isFirebaseConfigValid(): boolean {
   const cfg = firebaseConfig;
-  // 빈 문자열이거나 플레이스홀더 껍데기가 남아있는 경우, 혹은 잘못 주입된 문자열형 undefined/null 체크
+  
+  if (!cfg.apiKey || !cfg.projectId) {
+    return false;
+  }
+  
+  const cleanKey = cfg.apiKey.trim();
+  const cleanProject = cfg.projectId.trim();
+
   if (
-    !cfg.apiKey || 
-    !cfg.projectId || 
-    cfg.apiKey.trim() === '' || 
-    cfg.projectId.trim() === '' || 
-    cfg.apiKey === 'undefined' ||
-    cfg.projectId === 'undefined' ||
-    cfg.apiKey === 'null' ||
-    cfg.projectId === 'null' ||
-    cfg.apiKey.includes('[') || 
-    cfg.projectId.includes('[') ||
-    cfg.apiKey.includes('placeholder')
+    cleanKey === '' ||
+    cleanProject === '' ||
+    cleanKey === 'undefined' ||
+    cleanProject === 'undefined' ||
+    cleanKey === 'null' ||
+    cleanProject === 'null' ||
+    cleanKey.includes('[') ||
+    cleanProject.includes('[') ||
+    cleanKey.toLowerCase().includes('placeholder') ||
+    cleanProject.toLowerCase().includes('placeholder')
   ) {
     return false;
   }
+  
   return true;
 }
 
