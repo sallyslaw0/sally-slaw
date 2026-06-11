@@ -16,14 +16,31 @@ import {
 } from 'firebase/firestore';
 import { PortfolioItem, SiteSettings } from '../types';
 
+// Declare standard Vite client typings so TypeScript understands import.meta.env
+declare global {
+  interface ImportMetaEnv {
+    readonly VITE_FIREBASE_API_KEY?: string;
+    readonly VITE_FIREBASE_AUTH_DOMAIN?: string;
+    readonly VITE_FIREBASE_PROJECT_ID?: string;
+    readonly VITE_FIREBASE_STORAGE_BUCKET?: string;
+    readonly VITE_FIREBASE_MESSAGING_SENDER_ID?: string;
+    readonly VITE_FIREBASE_APP_ID?: string;
+    [key: string]: any;
+  }
+
+  interface ImportMeta {
+    readonly env: ImportMetaEnv;
+  }
+}
+
 // 환경 변수로부터 Firebase 초기화 설정 로드
 const firebaseConfig = {
-  apiKey: (import.meta as any).env.VITE_FIREBASE_API_KEY,
-  authDomain: (import.meta as any).env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: (import.meta as any).env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: (import.meta as any).env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: (import.meta as any).env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: (import.meta as any).env.VITE_FIREBASE_APP_ID,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
 // Firebase 설정이 유효한지 검증하는 헬퍼
@@ -55,9 +72,9 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage = '
   });
 }
 
-// Firebase 앱 및 Firestore 생성 (유효할 때만 초기화 권장, 혹은 기본 초기화 진행)
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+// Firebase 앱 및 Firestore 생성 (유효할 때만 초기화하여 모듈 로드 시의 크래시 예방)
+export const app = isFirebaseConfigValid() ? initializeApp(firebaseConfig) : null;
+export const db = app ? getFirestore(app) : null as any;
 
 // --- Connection Test (As required by system-skill) ---
 export async function testConnection() {
@@ -121,7 +138,7 @@ export async function fetchPortfolioItemsFromFirebase(): Promise<PortfolioItem[]
   try {
     const snapshot = await withTimeout(
       getDocs(collection(db, collectionPath)),
-      2000,
+      10000,
       'Firebase load items timed out'
     );
     const items: PortfolioItem[] = [];
@@ -204,7 +221,7 @@ export async function fetchSiteSettingsFromFirebase(): Promise<SiteSettings | nu
     const docRef = doc(db, 'settings', 'main');
     const snapshot = await withTimeout(
       getDoc(docRef),
-      2000,
+      10000,
       'Firebase load settings timed out'
     );
     if (snapshot.exists()) {
