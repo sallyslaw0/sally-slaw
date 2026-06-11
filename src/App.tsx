@@ -4,8 +4,8 @@
  */
 
 import { useState, useEffect } from 'react';
-import { PortfolioItem, SiteSettings } from './types';
-import { INITIAL_ITEMS, INITIAL_SETTINGS } from './data/initialData';
+import { PortfolioItem, SiteSettings, HistoryItem } from './types';
+import { INITIAL_ITEMS, INITIAL_SETTINGS, INITIAL_HISTORY } from './data/initialData';
 import { 
   Sparkles, Lock, Unlock, ArrowDown, Compass, Heart, Github, ExternalLink, HelpCircle, Loader2
 } from 'lucide-react';
@@ -26,11 +26,15 @@ import {
   savePortfolioItemToFirebase, 
   saveSiteSettingsToFirebase,
   deletePortfolioItemFromFirebase,
-  isFirebaseConfigValid
+  isFirebaseConfigValid,
+  fetchHistoryFromFirebase,
+  saveHistoryToFirebase,
+  deleteHistoryFromFirebase
 } from './lib/firebase';
 
 export default function App() {
   const [items, setItems] = useState<PortfolioItem[]>([]);
+  const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
   const [settings, setSettings] = useState<SiteSettings>(INITIAL_SETTINGS);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
@@ -56,6 +60,7 @@ export default function App() {
         
         let firebaseItems: PortfolioItem[] = [];
         let firebaseSettings: SiteSettings | null = null;
+        let firebaseHistory: HistoryItem[] = [];
         
         const validConfig = isFirebaseConfigValid();
         
@@ -72,6 +77,13 @@ export default function App() {
             firebaseSettings = await fetchSiteSettingsFromFirebase();
           } catch (err) {
             console.error("Firebase fetch settings failed:", err);
+          }
+
+          try {
+            // 3. Firebase에서 이력 목록 로드
+            firebaseHistory = await fetchHistoryFromFirebase();
+          } catch (err) {
+            console.error("Firebase fetch history failed:", err);
           }
         } else {
           console.log("Firebase config resides on default placeholder or is invalid. Engaging local storage persistence.");
@@ -96,24 +108,53 @@ export default function App() {
           }
         }
 
-        // --- Settings State Recovery ---
-        if (firebaseSettings) {
-          setSettings(firebaseSettings);
-          // Sync to localStorage
-          localStorage.setItem('sallys_settings', JSON.stringify(firebaseSettings));
+        // --- History State Recovery ---
+        if (firebaseHistory && firebaseHistory.length > 0) {
+          setHistoryItems(firebaseHistory);
+          localStorage.setItem('sallys_history', JSON.stringify(firebaseHistory));
         } else {
-          // If empty/failed on Firebase, try to recover from localStorage
+          const localHistory = localStorage.getItem('sallys_history');
+          if (localHistory) {
+            try {
+              setHistoryItems(JSON.parse(localHistory));
+            } catch {
+              setHistoryItems(INITIAL_HISTORY);
+            }
+          } else {
+            setHistoryItems(INITIAL_HISTORY);
+          }
+        }
+
+        // --- Settings State Recovery & Auto-Migration ---
+        let finalSettings = INITIAL_SETTINGS;
+        if (firebaseSettings) {
+          finalSettings = firebaseSettings;
+        } else {
           const localSettings = localStorage.getItem('sallys_settings');
           if (localSettings) {
             try {
-              setSettings(JSON.parse(localSettings));
+              finalSettings = JSON.parse(localSettings);
             } catch {
-              setSettings(INITIAL_SETTINGS);
+              finalSettings = INITIAL_SETTINGS;
             }
-          } else {
-            setSettings(INITIAL_SETTINGS);
           }
         }
+
+        // Auto-migrate old/empty youtube link to the brand-new YouTube handle
+        if (finalSettings.youtubeUrl === 'https://youtube.com/c/sallyslaw_atelier' || !finalSettings.youtubeUrl) {
+          finalSettings = {
+            ...finalSettings,
+            youtubeUrl: 'https://www.youtube.com/@SallysLaw-sx3cg'
+          };
+          if (validConfig) {
+            saveSiteSettingsToFirebase(finalSettings).catch(err => 
+              console.error("Auto-migrating youtubeUrl to firebase failed:", err)
+            );
+          }
+        }
+
+        setSettings(finalSettings);
+        localStorage.setItem('sallys_settings', JSON.stringify(finalSettings));
 
       } catch (err) {
         console.error("Firebase 로딩 실패, 로컬 폴백 모드 가동", err);
@@ -125,12 +166,32 @@ export default function App() {
           setItems(INITIAL_ITEMS);
         }
         
+        const localHistory = localStorage.getItem('sallys_history');
+        if (localHistory) {
+          try { setHistoryItems(JSON.parse(localHistory)); } catch { setHistoryItems(INITIAL_HISTORY); }
+        } else {
+          setHistoryItems(INITIAL_HISTORY);
+        }
+
+        let localSettingsObj = INITIAL_SETTINGS;
         const localSettings = localStorage.getItem('sallys_settings');
         if (localSettings) {
-          try { setSettings(JSON.parse(localSettings)); } catch { setSettings(INITIAL_SETTINGS); }
-        } else {
-          setSettings(INITIAL_SETTINGS);
+          try { 
+            localSettingsObj = JSON.parse(localSettings); 
+          } catch { 
+            localSettingsObj = INITIAL_SETTINGS; 
+          }
         }
+
+        if (localSettingsObj.youtubeUrl === 'https://youtube.com/c/sallyslaw_atelier' || !localSettingsObj.youtubeUrl) {
+          localSettingsObj = {
+            ...localSettingsObj,
+            youtubeUrl: 'https://www.youtube.com/@SallysLaw-sx3cg'
+          };
+          localStorage.setItem('sallys_settings', JSON.stringify(localSettingsObj));
+        }
+
+        setSettings(localSettingsObj);
       } finally {
         setIsLoading(false);
       }
@@ -182,16 +243,27 @@ export default function App() {
       for (const item of INITIAL_ITEMS) {
         await savePortfolioItemToFirebase(item);
       }
+
+      // 1.5 파이어베이스에 있는 이력 데이터도 삭제 후 초기값 세팅
+      const currentHistory = [...historyItems];
+      for (const h of currentHistory) {
+        await deleteHistoryFromFirebase(h.id);
+      }
+      for (const h of INITIAL_HISTORY) {
+        await saveHistoryToFirebase(h);
+      }
       
       // 2. 파이어베이스 설정 데이터 복구
       await saveSiteSettingsToFirebase(INITIAL_SETTINGS);
       
       // 3. 상태 일괄 선언
       setItems(INITIAL_ITEMS);
+      setHistoryItems(INITIAL_HISTORY);
       setSettings(INITIAL_SETTINGS);
       
       // 이전 호환성용 로컬스토리지는 보너스로 청소
       localStorage.setItem('sallys_items', JSON.stringify(INITIAL_ITEMS));
+      localStorage.setItem('sallys_history', JSON.stringify(INITIAL_HISTORY));
       localStorage.setItem('sallys_settings', JSON.stringify(INITIAL_SETTINGS));
       localStorage.removeItem('sallys_inquiries');
     } catch (err) {
@@ -267,6 +339,12 @@ export default function App() {
               className={`hover:text-gray-900 transition-colors ${mediaType === 'video' ? 'text-amber-500 font-bold' : ''}`}
             >
               영상 포트폴리오
+            </a>
+            <a 
+              href="#history" 
+              className="hover:text-gray-900 transition-colors"
+            >
+              연혁 & 이력
             </a>
             <a href="#contact" className="hover:text-gray-900 transition-colors">포트폴리오 문의</a>
           </nav>
@@ -369,6 +447,8 @@ export default function App() {
               <AdminPanel
                 items={items}
                 setItems={setItems}
+                historyItems={historyItems}
+                setHistoryItems={setHistoryItems}
                 settings={settings}
                 setSettings={setSettings}
                 onResetData={handleResetData}
@@ -403,6 +483,62 @@ export default function App() {
           />
         </div>
       </main>
+
+      {/* HISTORY & MILESTONES SECTION */}
+      <section id="history" className="py-20 border-t border-gray-100 scroll-mt-16" style={{ backgroundColor: `${settings.bgColor}33` }}>
+        <div className="mx-auto max-w-4xl px-6">
+          <div className="mb-12 space-y-2 text-center">
+            <span className="text-[10px] font-mono font-bold tracking-widest text-[#666666] uppercase flex items-center justify-center gap-1">
+              <Sparkles className="h-3.5 w-3.5 text-amber-500" style={{ color: settings.accentColor }} /> STUDIO HISTORY
+            </span>
+            <h2 className="text-2xl font-black tracking-tight text-[#1A1A1A] sm:text-3xl font-custom-heading">
+              스튜디오 이력
+            </h2>
+            <p className="text-xs text-[#666666] max-w-md mx-auto leading-relaxed">
+              샐리의 법칙 아틀리에가 걸어온 창작 활동과 공식 프로젝트 수행 기록입니다.
+            </p>
+          </div>
+
+          <div className="divide-y divide-gray-100/80 border-t border-b border-gray-200 font-sans">
+            {historyItems.length === 0 ? (
+              <div className="py-12 text-center text-xs text-gray-400 font-mono">
+                No history records found.
+              </div>
+            ) : (
+              [...historyItems]
+                .sort((a, b) => {
+                  if (typeof a.order === 'number' && typeof b.order === 'number' && a.order !== b.order) {
+                    return a.order - b.order;
+                  }
+                  return b.year.localeCompare(a.year);
+                })
+                .map((item) => (
+                  <div 
+                    key={item.id} 
+                    className="flex flex-col sm:flex-row sm:items-center py-5 gap-3 sm:gap-8 hover:bg-gray-50/50 px-4 -mx-4 transition-all duration-200 rounded-lg group"
+                  >
+                    {/* 연도 */}
+                    <div 
+                      className="w-20 shrink-0 font-mono font-bold text-lg text-gray-400 group-hover:text-amber-500 transition-colors duration-200"
+                    >
+                      {item.year}
+                    </div>
+                    
+                    {/* 프로젝트 명 & 내용 (하나의 줄 형태) */}
+                    <div className="flex-1 min-w-0 sm:flex sm:items-baseline sm:justify-between sm:gap-6">
+                      <div className="font-bold text-[15px] text-gray-900 leading-snug truncate sm:w-[40%]">
+                        {item.projectName}
+                      </div>
+                      <div className="text-xs text-gray-500 font-normal leading-relaxed mt-1 sm:mt-0 sm:flex-1 font-sans">
+                        {item.description}
+                      </div>
+                    </div>
+                  </div>
+                ))
+            )}
+          </div>
+        </div>
+      </section>
 
       {/* Collaboration Contact Area */}
       <ContactSection settings={settings} />
@@ -446,6 +582,14 @@ export default function App() {
                       className="hover:text-white transition-colors"
                     >
                       영상 포트폴리오
+                    </a>
+                  </li>
+                  <li>
+                    <a 
+                      href="#history" 
+                      className="hover:text-white transition-colors"
+                    >
+                      연혁 & 이력
                     </a>
                   </li>
                   <li><a href="#contact" className="hover:text-white transition-colors">비즈니스 협업 제안</a></li>

@@ -14,7 +14,7 @@ import {
   deleteDoc,
   getDocFromServer
 } from 'firebase/firestore';
-import { PortfolioItem, SiteSettings } from '../types';
+import { PortfolioItem, SiteSettings, HistoryItem } from '../types';
 
 // Declare standard Vite client typings so TypeScript understands import.meta.env
 declare global {
@@ -230,8 +230,12 @@ export async function fetchPortfolioItemsFromFirebase(): Promise<PortfolioItem[]
         client: data.client || '',
         year: data.year || '',
         tags: data.tags || [],
+        order: typeof data.order === 'number' ? data.order : 0,
       });
     });
+    
+    // Sort items based on order field
+    items.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     return items;
   } catch (error) {
     return handleFirestoreError(error, OperationType.LIST, collectionPath);
@@ -259,7 +263,8 @@ export async function savePortfolioItemToFirebase(item: PortfolioItem): Promise<
       youtubeUrl: item.youtubeUrl || '',
       client: item.client,
       year: item.year,
-      tags: item.tags || []
+      tags: item.tags || [],
+      order: typeof item.order === 'number' ? item.order : 0
     });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, documentPath);
@@ -323,3 +328,82 @@ export async function saveSiteSettingsToFirebase(settings: SiteSettings): Promis
     handleFirestoreError(error, OperationType.WRITE, documentPath);
   }
 }
+
+/**
+ * 이력 리스트 로드 (Firebase)
+ */
+export async function fetchHistoryFromFirebase(): Promise<HistoryItem[]> {
+  const collectionPath = 'historyItems';
+  if (!isFirebaseConfigValid()) {
+    throw new Error('Firebase configuration is missing or invalid.');
+  }
+  try {
+    const snapshot = await withTimeout(
+      getDocs(collection(db, collectionPath)),
+      10000,
+      'Firebase load history timed out'
+    );
+    const items: HistoryItem[] = [];
+    snapshot.forEach((document) => {
+      const data = document.data();
+      items.push({
+        id: document.id,
+        year: data.year || '',
+        projectName: data.projectName || '',
+        description: data.description || '',
+        order: typeof data.order === 'number' ? data.order : 0,
+      });
+    });
+    
+    // Sort items based on order field, or by year DESC as fallback
+    items.sort((a, b) => {
+      if (typeof a.order === 'number' && typeof b.order === 'number' && a.order !== b.order) {
+        return a.order - b.order;
+      }
+      return b.year.localeCompare(a.year);
+    });
+    return items;
+  } catch (error) {
+    return handleFirestoreError(error, OperationType.LIST, collectionPath);
+  }
+}
+
+/**
+ * 이력 개별 저장 또는 업데이트
+ */
+export async function saveHistoryToFirebase(item: HistoryItem): Promise<void> {
+  if (!isFirebaseConfigValid()) {
+    console.warn("Firebase config is invalid. Skipping remote save, item preserved in localStorage.");
+    return Promise.resolve();
+  }
+  const documentPath = `historyItems/${item.id}`;
+  try {
+    const docRef = doc(db, 'historyItems', item.id);
+    await setDoc(docRef, {
+      year: item.year,
+      projectName: item.projectName,
+      description: item.description,
+      order: typeof item.order === 'number' ? item.order : 0
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, documentPath);
+  }
+}
+
+/**
+ * 이력 아이템 삭제
+ */
+export async function deleteHistoryFromFirebase(itemId: string): Promise<void> {
+  if (!isFirebaseConfigValid()) {
+    console.warn("Firebase config is invalid. Skipping remote delete, item removed from localStorage.");
+    return Promise.resolve();
+  }
+  const documentPath = `historyItems/${itemId}`;
+  try {
+    const docRef = doc(db, 'historyItems', itemId);
+    await deleteDoc(docRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, documentPath);
+  }
+}
+

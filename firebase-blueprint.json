@@ -15,7 +15,8 @@
         "youtubeUrl": { "type": "string" },
         "client": { "type": "string" },
         "year": { "type": "string" },
-        "tags": { "type": "array" }
+        "tags": { "type": "array" },
+        "order": { "type": "number" }
       },
       "required": ["id", "title", "category", "summary", "description", "imageUrl"]
     },
@@ -37,6 +38,19 @@
         "behanceUrl": { "type": "string" }
       },
       "required": ["accentColor", "bgColor", "fontFamily", "baseFontSize", "siteTitle"]
+    },
+    "HistoryItem": {
+      "title": "HistoryItem",
+      "description": "Brief year-by-year history record item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "year": { "type": "string" },
+        "projectName": { "type": "string" },
+        "description": { "type": "string" },
+        "order": { "type": "number" }
+      },
+      "required": ["id", "year", "projectName", "description"]
     }
   },
   "firestore": {
@@ -47,6 +61,10 @@
     "/settings/{settingId}": {
       "schema": "SiteSettings",
       "description": "Global settings for UI customization"
+    },
+    "/historyItems/{itemId}": {
+      "schema": "HistoryItem",
+      "description": "Collection of all studio milestone history records"
     }
   }
 }

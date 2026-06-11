@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { PortfolioItem, SiteSettings } from '../types';
+import { PortfolioItem, SiteSettings, HistoryItem } from '../types';
 
 export const INITIAL_ITEMS: PortfolioItem[] = [
   {
@@ -16,7 +16,8 @@ export const INITIAL_ITEMS: PortfolioItem[] = [
     youtubeUrl: 'https://www.youtube.com/watch?v=ZeaM68cK3v4', // Beautiful architectural / graphic design vibe placeholder
     client: '샐리의 법칙 아틀리에',
     year: '2026',
-    tags: ['Branding', 'Typography', 'Stationery', 'Gold Foil']
+    tags: ['Branding', 'Typography', 'Stationery', 'Gold Foil'],
+    order: 0
   },
   {
     id: 'minimal-editorial',
@@ -28,7 +29,8 @@ export const INITIAL_ITEMS: PortfolioItem[] = [
     youtubeUrl: 'https://www.youtube.com/watch?v=vVkaAnY1QYI', // High quality abstract video
     client: '도서출판 아침향기',
     year: '2025',
-    tags: ['Editorial Book', 'Swiss Typo', 'Lay-out', 'Print Design']
+    tags: ['Editorial Book', 'Swiss Typo', 'Lay-out', 'Print Design'],
+    order: 1
   },
   {
     id: 'fortuna-uiux',
@@ -40,7 +42,8 @@ export const INITIAL_ITEMS: PortfolioItem[] = [
     youtubeUrl: 'https://www.youtube.com/watch?v=hID_O_tL9Qg', // App interactive presentation vibe placeholder
     client: '포르투나 랩스',
     year: '2026',
-    tags: ['Mobile Application', 'UX Research', 'Micro-Interactions', 'Figma Wireframe']
+    tags: ['Mobile Application', 'UX Research', 'Micro-Interactions', 'Figma Wireframe'],
+    order: 2
   },
   {
     id: 'luminary-packaging',
@@ -51,7 +54,8 @@ export const INITIAL_ITEMS: PortfolioItem[] = [
     imageUrl: 'https://images.unsplash.com/photo-1523293182086-7651a899d37f?q=80&w=1200&auto=format&fit=crop',
     client: '루미너리 서울',
     year: '2025',
-    tags: ['Package Design', 'Eco-Luxury', 'Eco-Paper', 'Gold Stamp']
+    tags: ['Package Design', 'Eco-Luxury', 'Eco-Paper', 'Gold Stamp'],
+    order: 3
   }
 ];
 
@@ -65,6 +69,34 @@ export const INITIAL_SETTINGS: SiteSettings = {
   contactEmail: 'sallyslaw0@daum.net',
   contactPhone: '02-543-2026',
   instagramUrl: 'https://instagram.com/sallyslaw.design',
-  youtubeUrl: 'https://youtube.com/c/sallyslaw_atelier',
+  youtubeUrl: 'https://www.youtube.com/@SallysLaw-sx3cg',
   behanceUrl: 'https://behance.net/sallyslaw'
 };
+
+export const INITIAL_HISTORY: HistoryItem[] = [
+  {
+    id: 'history-1',
+    year: '2026',
+    projectName: '샐리의 법칙 (Sally\'s Law) 크리에이티브 디자인 아틀리에 개편',
+    description: '디자인 철학과 미니멀 포트폴리오를 디지털 쇼케이스로 일원화 구축 완료'
+  },
+  {
+    id: 'history-2',
+    year: '2025',
+    projectName: '오가닉 아키텍처 한정판 아트 에디토리얼 화보집',
+    description: '도서출판 아침향기 아트 에렉션 및 아카이브 서적 타이포그래피 개발'
+  },
+  {
+    id: 'history-3',
+    year: '2025',
+    projectName: '포르투나 (Fortuna) 웰니스 라이브러리 UI/UX 설계',
+    description: '포르투나 랩스 모바일 애플리케이션 화면 마이크로 인터랙션 특화 모듈 개발'
+  },
+  {
+    id: 'history-4',
+    year: '2024',
+    projectName: '루미너리 서울 패키징 신년 리미티드 세트',
+    description: '전국 온/오프라인 전시장 전량 매진 달성 및 친환경 콩기름 지질 어워드 디자인 선정'
+  }
+];
+

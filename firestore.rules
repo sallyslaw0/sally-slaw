@@ -18,5 +18,11 @@ service cloud.firestore {
       allow read: if true;
       allow write: if true;
     }
+
+    // History logs - Everyone can read, anyone can write for instant online modifications
+    match /historyItems/{itemId} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }

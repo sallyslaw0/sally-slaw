@@ -4,19 +4,28 @@
  */
 
 import React, { useState } from 'react';
-import { PortfolioItem, SiteSettings, FontFamilyType } from '../types';
+import { PortfolioItem, SiteSettings, HistoryItem, FontFamilyType } from '../types';
 import ConfirmModal from './ConfirmModal';
 import { 
   Settings, Save, Plus, Trash2, Edit3, Image, Video, Globe, 
   HelpCircle, Sparkles, Check, RefreshCw, Type, Layout, Code2,
   Upload, Star, Trash, Link as LinkIcon, Search, FolderOpen, X,
-  ChevronDown, ChevronUp
+  ChevronDown, ChevronUp, Clock
 } from 'lucide-react';
-import { savePortfolioItemToFirebase, deletePortfolioItemFromFirebase, saveSiteSettingsToFirebase, isFirebaseConfigValid } from '../lib/firebase';
+import { 
+  savePortfolioItemToFirebase, 
+  deletePortfolioItemFromFirebase, 
+  saveSiteSettingsToFirebase, 
+  isFirebaseConfigValid,
+  saveHistoryToFirebase,
+  deleteHistoryFromFirebase
+} from '../lib/firebase';
 
 interface AdminPanelProps {
   items: PortfolioItem[];
   setItems: React.Dispatch<React.SetStateAction<PortfolioItem[]>>;
+  historyItems: HistoryItem[];
+  setHistoryItems: React.Dispatch<React.SetStateAction<HistoryItem[]>>;
   settings: SiteSettings;
   setSettings: React.Dispatch<React.SetStateAction<SiteSettings>>;
   onResetData: () => void;
@@ -97,9 +106,18 @@ const resizeImage = (file: File, maxWidth = 1000, maxHeight = 1000): Promise<str
   });
 };
 
-export default function AdminPanel({ items, setItems, settings, setSettings, onResetData }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<'content' | 'theme' | 'seo' | 'sync'>('content');
+export default function AdminPanel({ 
+  items, 
+  setItems, 
+  historyItems, 
+  setHistoryItems, 
+  settings, 
+  setSettings, 
+  onResetData 
+}: AdminPanelProps) {
+  const [activeTab, setActiveTab] = useState<'content' | 'history' | 'theme' | 'seo' | 'sync'>('content');
   const [editingItem, setEditingItem] = useState<Partial<PortfolioItem> | null>(null);
+  const [editingHistoryItem, setEditingHistoryItem] = useState<Partial<HistoryItem> | null>(null);
   const [formMediaType, setFormMediaType] = useState<'photo' | 'video'>('photo');
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -107,17 +125,20 @@ export default function AdminPanel({ items, setItems, settings, setSettings, onR
   const generateInitialDataCode = (): string => {
     // Generate clean output formatting
     const formattedItems = JSON.stringify(items, null, 2);
+    const formattedHistory = JSON.stringify(historyItems, null, 2);
     const formattedSettings = JSON.stringify(settings, null, 2);
     return `/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { PortfolioItem, SiteSettings } from '../types';
+import { PortfolioItem, SiteSettings, HistoryItem } from '../types';
 
 export const INITIAL_ITEMS: PortfolioItem[] = ${formattedItems};
 
 export const INITIAL_SETTINGS: SiteSettings = ${formattedSettings};
+
+export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
 `;
   };
 
@@ -149,6 +170,126 @@ export const INITIAL_SETTINGS: SiteSettings = ${formattedSettings};
       triggerToast('클립보드 복사 실패. 텍스트를 선택하여 직접 복사해 주세요.');
     }
   };
+
+  // --- History Milestone Event Handlers ---
+  const handleStartAddHistory = () => {
+    setEditingHistoryItem({
+      id: `history-${Date.now()}`,
+      year: new Date().getFullYear().toString(),
+      projectName: '',
+      description: '',
+      order: historyItems.length > 0 ? Math.max(...historyItems.map(i => i.order || 0)) + 1 : 0
+    });
+  };
+
+  const handleStartEditHistory = (item: HistoryItem) => {
+    setEditingHistoryItem({ ...item });
+  };
+
+  const handleCancelEditHistory = () => {
+    setEditingHistoryItem(null);
+  };
+
+  const handleSaveHistoryItem = async () => {
+    if (!editingHistoryItem || !editingHistoryItem.id || !editingHistoryItem.year || !editingHistoryItem.projectName) {
+      triggerToast('연도와 프로젝트 명은 필수 필드입니다.');
+      return;
+    }
+
+    const itemToSave: HistoryItem = {
+      id: editingHistoryItem.id,
+      year: editingHistoryItem.year.trim(),
+      projectName: editingHistoryItem.projectName.trim(),
+      description: (editingHistoryItem.description || '').trim(),
+      order: typeof editingHistoryItem.order === 'number' ? editingHistoryItem.order : 0
+    };
+
+    try {
+      const exists = historyItems.some(i => i.id === itemToSave.id);
+      let updatedHistory: HistoryItem[] = [];
+      if (exists) {
+        updatedHistory = historyItems.map(i => i.id === itemToSave.id ? itemToSave : i);
+      } else {
+        updatedHistory = [...historyItems, itemToSave];
+      }
+
+      // Sort
+      updatedHistory.sort((a, b) => {
+        if (typeof a.order === 'number' && typeof b.order === 'number' && a.order !== b.order) {
+          return a.order - b.order;
+        }
+        return b.year.localeCompare(a.year);
+      });
+
+      setHistoryItems(updatedHistory);
+      localStorage.setItem('sallys_history', JSON.stringify(updatedHistory));
+
+      if (isFirebaseConfigValid()) {
+        await saveHistoryToFirebase(itemToSave);
+        triggerToast('이력 데이터가 Firebase 리얼타임 데이터베이스에 즉각 반영되었습니다.');
+      } else {
+        triggerToast('로컬 브라우저 저장소에 이력이 안전하게 보관되었습니다.');
+      }
+      setEditingHistoryItem(null);
+    } catch (err: any) {
+      console.error('History save error:', err);
+      triggerToast(`이력 저장 중 오류: ${err.message || String(err)}`);
+    }
+  };
+
+  const handleDeleteHistoryItem = async (itemId: string) => {
+    if (!window.confirm('선택하신 아카이브 이력을 완전히 영구 삭제하시겠습니까?')) return;
+
+    try {
+      const updatedHistory = historyItems.filter(i => i.id !== itemId);
+      setHistoryItems(updatedHistory);
+      localStorage.setItem('sallys_history', JSON.stringify(updatedHistory));
+
+      if (isFirebaseConfigValid()) {
+        await deleteHistoryFromFirebase(itemId);
+        triggerToast('선택한 이력이 Firebase 클라우드에서 영구 삭제되었습니다.');
+      } else {
+        triggerToast('로컬 브라우저 저장소에서 정상 제거되었습니다.');
+      }
+    } catch (err: any) {
+      console.error('History delete error:', err);
+      triggerToast(`이력삭제오류: ${err.message || String(err)}`);
+    }
+  };
+
+  const handleMoveHistory = async (index: number, direction: 'up' | 'down') => {
+    const newItems = [...historyItems];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+
+    if (targetIndex < 0 || targetIndex >= newItems.length) return;
+
+    // Swap
+    const temp = newItems[index];
+    newItems[index] = newItems[targetIndex];
+    newItems[targetIndex] = temp;
+
+    // Force sequence ordering updates
+    const reordered = newItems.map((item, idx) => ({
+      ...item,
+      order: idx
+    }));
+
+    setHistoryItems(reordered);
+    localStorage.setItem('sallys_history', JSON.stringify(reordered));
+
+    if (isFirebaseConfigValid()) {
+      try {
+        await Promise.all(reordered.map(item => saveHistoryToFirebase(item)));
+        triggerToast('순서 수정 사항이 데이터베이스에 정상적으로 전파 및 적용되었습니다.');
+      } catch (err: any) {
+        console.error('Firebase order sweep failed:', err);
+        triggerToast(`Firebase 저장 중 일부 오류: ${err.message}`);
+      }
+    } else {
+      triggerToast('로컬 표시 순서 변경이 완료되었습니다.');
+    }
+  };
+  
   
   // Custom confirmation modal state for deletion
   const [deleteConfirmState, setDeleteConfirmState] = useState<{ isOpen: boolean; id: string; title: string }>({
@@ -605,15 +746,21 @@ export const INITIAL_SETTINGS: SiteSettings = ${formattedSettings};
     const exists = items.some(item => item.id === validated.id);
     let updatedItems: PortfolioItem[];
     if (exists) {
-      updatedItems = items.map(item => item.id === validated.id ? validated : item);
+      updatedItems = items.map(item => item.id === validated.id ? { ...validated, order: item.order } : item);
     } else {
       updatedItems = [validated, ...items];
     }
 
-    setItems(updatedItems);
+    // Re-assign explicit order based on their actual array position
+    const orderedItems = updatedItems.map((item, idx) => ({
+      ...item,
+      order: idx
+    }));
+
+    setItems(orderedItems);
     
-    // Firebase 영구 업로드 및 동기화
-    savePortfolioItemToFirebase(validated)
+    // Firebase 영구 업로드 및 동기화 (전환 순서 일괄 갱신 필수)
+    syncOrderToFirebase(orderedItems)
       .then(() => {
         triggerToast(exists ? '포트폴리오 정보가 파이어베이스에 업데이트 되었습니다.' : '새로운 포트폴리오 프로젝트가 파이어베이스에 정상 등록되었습니다.');
       })
@@ -622,7 +769,7 @@ export const INITIAL_SETTINGS: SiteSettings = ${formattedSettings};
       });
     
     try {
-      localStorage.setItem('sallys_items', JSON.stringify(updatedItems));
+      localStorage.setItem('sallys_items', JSON.stringify(orderedItems));
     } catch (error) {
       console.error('LocalStorage 저장 한도 초과 오류:', error);
     }
@@ -661,14 +808,19 @@ export const INITIAL_SETTINGS: SiteSettings = ${formattedSettings};
   };
 
   // Firebase에 전체 아이템의 포트폴리오 순서를 동기화하기 위한 헬퍼
-  const syncOrderToFirebase = async (updatedList: PortfolioItem[]) => {
+  const syncOrderToFirebase = async (updatedList: PortfolioItem[]): Promise<void> => {
     try {
-      // 순서대로 Firebase 저장 처리
-      for (const item of updatedList) {
+      // 인덱스를 기준으로 각 아이템의 order 필드를 업데이트하여 순차 저장
+      const listWithNewOrders = updatedList.map((item, idx) => ({
+        ...item,
+        order: idx
+      }));
+      for (const item of listWithNewOrders) {
         await savePortfolioItemToFirebase(item);
       }
     } catch (err) {
       console.error("순서 파이어베이스 동기화 실패:", err);
+      throw err;
     }
   };
 
@@ -678,9 +830,16 @@ export const INITIAL_SETTINGS: SiteSettings = ${formattedSettings};
     const temp = updated[index];
     updated[index] = updated[index - 1];
     updated[index - 1] = temp;
-    setItems(updated);
-    localStorage.setItem('sallys_items', JSON.stringify(updated));
-    syncOrderToFirebase(updated);
+
+    // 재정렬된 인덱스를 order로 보정하여 상태 갱신
+    const orderedList = updated.map((item, idx) => ({
+      ...item,
+      order: idx
+    }));
+
+    setItems(orderedList);
+    localStorage.setItem('sallys_items', JSON.stringify(orderedList));
+    syncOrderToFirebase(orderedList);
     triggerToast('게시 순서가 상승하여 파이어베이스에 동기화되었습니다.');
   };
 
@@ -690,9 +849,16 @@ export const INITIAL_SETTINGS: SiteSettings = ${formattedSettings};
     const temp = updated[index];
     updated[index] = updated[index + 1];
     updated[index + 1] = temp;
-    setItems(updated);
-    localStorage.setItem('sallys_items', JSON.stringify(updated));
-    syncOrderToFirebase(updated);
+
+    // 재정렬된 인덱스를 order로 보정하여 상태 갱신
+    const orderedList = updated.map((item, idx) => ({
+      ...item,
+      order: idx
+    }));
+
+    setItems(orderedList);
+    localStorage.setItem('sallys_items', JSON.stringify(orderedList));
+    syncOrderToFirebase(orderedList);
     triggerToast('게시 순서가 하락하여 파이어베이스에 동기화되었습니다.');
   };
 
@@ -761,6 +927,16 @@ export const INITIAL_SETTINGS: SiteSettings = ${formattedSettings};
           }`}
         >
           <Layout className="h-4 w-4" /> 포트폴리오 관리
+        </button>
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-semibold transition-all ${
+            activeTab === 'history'
+              ? 'border-[var(--accent-color)] text-amber-600 font-bold'
+              : 'border-transparent text-gray-500 hover:text-gray-900'
+          }`}
+        >
+          <Clock className="h-4 w-4" /> 연혁 & 이력 관리
         </button>
         <button
           onClick={() => setActiveTab('theme')}
@@ -1249,6 +1425,190 @@ export const INITIAL_SETTINGS: SiteSettings = ${formattedSettings};
                     <tr>
                       <td colSpan={6} className="px-4 py-10 text-center text-gray-400">
                         표시할 포트폴리오 에셋이 비어 있습니다. 상단의 새 프로젝트 등록을 활용해 채워 넣어 주세요.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 1.5: HISTORY LIST CRUD */}
+        {activeTab === 'history' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-gray-800">
+                연혁 및 이력 관리 ({historyItems.length}개)
+              </h3>
+              {!editingHistoryItem && (
+                <button
+                  onClick={handleStartAddHistory}
+                  className="flex items-center gap-1.5 rounded-lg bg-amber-500 text-gray-950 px-3 py-1.5 text-xs font-bold hover:bg-amber-400 transition-all cursor-pointer shadow-xs"
+                >
+                  <Plus className="h-3.5 w-3.5" /> 새 이력 작성 추가
+                </button>
+              )}
+            </div>
+
+            {/* EDIT/ADD Form for History */}
+            {editingHistoryItem && (
+              <div className="rounded-xl border border-amber-200/40 bg-amber-50/20 p-5 space-y-4 font-sans animate-fade-in">
+                <div className="flex items-center justify-between border-b border-amber-100 pb-2">
+                  <span className="text-xs font-bold text-amber-800 flex items-center gap-1">
+                    <Clock className="h-3.5 w-3.5" /> 이력 항목 편집 / 새로 만들기
+                  </span>
+                  <button 
+                    onClick={handleCancelEditHistory}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* 연도 */}
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold text-gray-600 font-sans">연도 (Year) <span className="text-red-500">*</span></label>
+                    <input 
+                      type="text" 
+                      placeholder="예: 2026"
+                      value={editingHistoryItem.year || ''}
+                      onChange={(e) => setEditingHistoryItem({ ...editingHistoryItem, year: e.target.value })}
+                      className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-xs text-gray-800 focus:border-amber-400 focus:ring-1 focus:ring-amber-400 outline-none"
+                    />
+                  </div>
+
+                  {/* 프로젝트 명 */}
+                  <div className="space-y-1 md:col-span-2">
+                    <label className="block text-xs font-bold text-gray-600 font-sans">프로젝트 명 (Project Name) <span className="text-red-500">*</span></label>
+                    <input 
+                      type="text" 
+                      placeholder="예: 루미너리 서울 신년 제품 어워드 디자인"
+                      value={editingHistoryItem.projectName || ''}
+                      onChange={(e) => setEditingHistoryItem({ ...editingHistoryItem, projectName: e.target.value })}
+                      className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-xs text-gray-800 focus:border-amber-400 focus:ring-1 focus:ring-amber-400 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* 내용 */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-gray-600 font-sans">내용 (Content / Description)</label>
+                  <textarea 
+                    placeholder="프로젝트 세부 사항을 요약 기재하세요."
+                    rows={4}
+                    value={editingHistoryItem.description || ''}
+                    onChange={(e) => setEditingHistoryItem({ ...editingHistoryItem, description: e.target.value })}
+                    className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-xs text-gray-800 focus:border-amber-400 focus:ring-1 focus:ring-amber-400 outline-none font-sans"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-amber-100">
+                  <button 
+                    onClick={handleCancelEditHistory}
+                    className="rounded-md border border-gray-200 bg-white hover:bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-600 transition-colors"
+                  >
+                    취소
+                  </button>
+                  <button 
+                    onClick={handleSaveHistoryItem}
+                    className="rounded-md bg-amber-500 hover:bg-amber-450 px-4 py-1.5 text-xs font-bold text-gray-950 hover:filter hover:brightness-105 transition-all flex items-center gap-1 cursor-pointer"
+                  >
+                    <Save className="h-3.5 w-3.5" /> 저장 반영하기
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* List Table for History Items */}
+            <div className="overflow-hidden rounded-xl border border-gray-100 bg-white">
+              <table className="w-full text-left font-sans text-xs">
+                <thead>
+                  <tr className="bg-gray-50 text-gray-600 font-bold border-b border-gray-100">
+                    <th className="px-4 py-3 w-16 text-center">순서</th>
+                    <th className="px-4 py-3 w-28">연도</th>
+                    <th className="px-4 py-3 w-64">프로젝트 명</th>
+                    <th className="px-4 py-3">세부 내용</th>
+                    <th className="px-4 py-3 w-32 text-right">이동 / 편집</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100/60 text-gray-700">
+                  {historyItems
+                    .sort((a, b) => {
+                      if (typeof a.order === 'number' && typeof b.order === 'number' && a.order !== b.order) {
+                        return a.order - b.order;
+                      }
+                      return b.year.localeCompare(a.year);
+                    })
+                    .map((item, idx) => (
+                      <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
+                        {/* Drag order index ranking */}
+                        <td className="px-4 py-3 font-mono text-center text-gray-400">
+                          {idx + 1}
+                        </td>
+                        
+                        {/* 연도 */}
+                        <td className="px-4 py-3 font-mono font-bold text-amber-600">
+                          {item.year}
+                        </td>
+                        
+                        {/* 프로젝트명 */}
+                        <td className="px-4 py-3 font-bold text-gray-900 leading-snug">
+                          {item.projectName}
+                        </td>
+
+                        {/* 내용 */}
+                        <td className="px-4 py-3 text-gray-500 leading-relaxed font-sans cell-wrap max-w-sm">
+                          {item.description}
+                        </td>
+
+                        {/* 작업 동작 */}
+                        <td className="px-4 py-3 text-right space-x-1">
+                          {/* Move up */}
+                          <button
+                            onClick={() => handleMoveHistory(idx, 'up')}
+                            disabled={idx === 0}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-150 bg-white disabled:opacity-30 disabled:pointer-events-none hover:border-gray-300"
+                            title="위로 이동"
+                          >
+                            <ChevronUp className="h-3.5 w-3.5 text-gray-500" />
+                          </button>
+                          
+                          {/* Move down */}
+                          <button
+                            onClick={() => handleMoveHistory(idx, 'down')}
+                            disabled={idx === historyItems.length - 1}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-150 bg-white disabled:opacity-30 disabled:pointer-events-none hover:border-gray-300"
+                            title="아래로 이동"
+                          >
+                            <ChevronDown className="h-3.5 w-3.5 text-gray-500" />
+                          </button>
+                          
+                          {/* Edit */}
+                          <button
+                            onClick={() => handleStartEditHistory(item)}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-150 bg-white hover:border-amber-400 hover:text-amber-500"
+                            title="수정"
+                          >
+                            <Edit3 className="h-3 w-3" />
+                          </button>
+                          
+                          {/* Delete */}
+                          <button
+                            onClick={() => handleDeleteHistoryItem(item.id)}
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-gray-150 bg-white hover:border-red-400 hover:text-red-550"
+                            title="삭제"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  {historyItems.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-12 text-center text-gray-400 font-mono">
+                        등록된 이력이 없습니다. 우측 상단의 추가 버튼으로 등록해 주세요.
                       </td>
                     </tr>
                   )}

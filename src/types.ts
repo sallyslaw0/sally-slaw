@@ -15,9 +15,18 @@ export interface PortfolioItem {
   client: string;
   year: string;
   tags: string[];
+  order?: number;
 }
 
 export type FontFamilyType = 'sans' | 'serif' | 'mono';
+
+export interface HistoryItem {
+  id: string;
+  year: string;
+  projectName: string;
+  description: string;
+  order?: number; // For fallback custom sorting if needed, but defaults to descending string/year sorting or list reverse
+}
 
 export interface SiteSettings {
   accentColor: string;
