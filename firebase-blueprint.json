@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "PortfolioItem": {
+      "title": "PortfolioItem",
+      "description": "Portfolio project item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "summary": { "type": "string" },
+        "description": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "imageUrls": { "type": "array" },
+        "youtubeUrl": { "type": "string" },
+        "client": { "type": "string" },
+        "year": { "type": "string" },
+        "tags": { "type": "array" }
+      },
+      "required": ["id", "title", "category", "summary", "description", "imageUrl"]
+    },
+    "SiteSettings": {
+      "title": "SiteSettings",
+      "description": "Global custom configurations for Sally's Law portfolio site",
+      "type": "object",
+      "properties": {
+        "accentColor": { "type": "string" },
+        "bgColor": { "type": "string" },
+        "fontFamily": { "type": "string" },
+        "baseFontSize": { "type": "number" },
+        "siteTitle": { "type": "string" },
+        "siteSubtitle": { "type": "string" },
+        "contactEmail": { "type": "string" },
+        "contactPhone": { "type": "string" },
+        "instagramUrl": { "type": "string" },
+        "youtubeUrl": { "type": "string" },
+        "behanceUrl": { "type": "string" }
+      },
+      "required": ["accentColor", "bgColor", "fontFamily", "baseFontSize", "siteTitle"]
+    }
+  },
+  "firestore": {
+    "/portfolioItems/{itemId}": {
+      "schema": "PortfolioItem",
+      "description": "Collection of all portfolio projects"
+    },
+    "/settings/{settingId}": {
+      "schema": "SiteSettings",
+      "description": "Global settings for UI customization"
+    }
+  }
+}

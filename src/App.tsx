@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import { PortfolioItem, SiteSettings } from './types';
 import { INITIAL_ITEMS, INITIAL_SETTINGS } from './data/initialData';
 import { 
-  Sparkles, Lock, Unlock, ArrowDown, Compass, Heart, Github, ExternalLink, HelpCircle 
+  Sparkles, Lock, Unlock, ArrowDown, Compass, Heart, Github, ExternalLink, HelpCircle, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -19,41 +19,19 @@ import ContactSection from './components/ContactSection';
 import AdminPasswordModal from './components/AdminPasswordModal';
 import ConfirmModal from './components/ConfirmModal';
 
-export default function App() {
-  // Load State from LocalStorage with sensible initial fallbacks
-  const [items, setItems] = useState<PortfolioItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('sallys_items');
-      return saved ? JSON.parse(saved) : INITIAL_ITEMS;
-    } catch {
-      return INITIAL_ITEMS;
-    }
-  });
+// Firebase Integrations
+import { 
+  fetchPortfolioItemsFromFirebase, 
+  fetchSiteSettingsFromFirebase, 
+  savePortfolioItemToFirebase, 
+  saveSiteSettingsToFirebase,
+  deletePortfolioItemFromFirebase
+} from './lib/firebase';
 
-  const [settings, setSettings] = useState<SiteSettings>(() => {
-    try {
-      const saved = localStorage.getItem('sallys_settings');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        let updated = false;
-        if (parsed.contactEmail === 'contact@sallyslaw-design.com') {
-          parsed.contactEmail = 'sallyslaw0@daum.net';
-          updated = true;
-        }
-        if (parsed.siteTitle === '샐리의법') {
-          parsed.siteTitle = '샐리의 법칙';
-          updated = true;
-        }
-        if (updated) {
-          localStorage.setItem('sallys_settings', JSON.stringify(parsed));
-        }
-        return parsed;
-      }
-      return INITIAL_SETTINGS;
-    } catch {
-      return INITIAL_SETTINGS;
-    }
-  });
+export default function App() {
+  const [items, setItems] = useState<PortfolioItem[]>([]);
+  const [settings, setSettings] = useState<SiteSettings>(INITIAL_SETTINGS);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const [selectedItem, setSelectedItem] = useState<PortfolioItem | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
@@ -69,6 +47,47 @@ export default function App() {
     }
   };
 
+  // Firebase 실시간 / 전역 데이터 초기 로드 및 기본 마이그레이션 이펙트
+  useEffect(() => {
+    async function loadInitialData() {
+      try {
+        setIsLoading(true);
+        
+        // 1. Firebase에서 포트폴리오 로드
+        let firebaseItems = await fetchPortfolioItemsFromFirebase();
+        
+        // 만약 파이어베이스가 최초 상태라 비어있다면, 디폴트 데이터 자동 업로드(마이그레이션)
+        if (!firebaseItems || firebaseItems.length === 0) {
+          console.log("Firebase is empty. Migrating default portfolio items...");
+          for (const item of INITIAL_ITEMS) {
+            await savePortfolioItemToFirebase(item);
+          }
+          firebaseItems = INITIAL_ITEMS;
+        }
+        setItems(firebaseItems);
+
+        // 2. Firebase에서 글로벌 디자인 설정 로드
+        let firebaseSettings = await fetchSiteSettingsFromFirebase();
+        
+        // 만약 설정이 비어있다면, 디폴트 설정 파이어베이스에 입력
+        if (!firebaseSettings) {
+          console.log("Firebase setting is empty. Migrating default settings...");
+          await saveSiteSettingsToFirebase(INITIAL_SETTINGS);
+          firebaseSettings = INITIAL_SETTINGS;
+        }
+        setSettings(firebaseSettings);
+      } catch (err) {
+        console.error("Firebase 로딩 실패, 로컬 폴백 모드 가동", err);
+        // 만약 통신 에러가 나더라도 UI가 정상 출력될 수 있도록 기동 보장
+        setItems(INITIAL_ITEMS);
+        setSettings(INITIAL_SETTINGS);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadInitialData();
+  }, []);
+
   // Dynamically load premium Google font subsets on mount
   useEffect(() => {
     const link = document.createElement('link');
@@ -82,6 +101,7 @@ export default function App() {
 
   // Sync settings properties into top-level HTML page nodes for ultimate body styling
   useEffect(() => {
+    if (!settings) return;
     const root = document.documentElement;
     root.style.setProperty('--bg-color', settings.bgColor);
     root.style.setProperty('--accent-color', settings.accentColor);
@@ -100,13 +120,47 @@ export default function App() {
     setIsResetConfirmOpen(true);
   };
 
-  const executeResetData = () => {
-    setItems(INITIAL_ITEMS);
-    setSettings(INITIAL_SETTINGS);
-    localStorage.setItem('sallys_items', JSON.stringify(INITIAL_ITEMS));
-    localStorage.setItem('sallys_settings', JSON.stringify(INITIAL_SETTINGS));
-    localStorage.removeItem('sallys_inquiries');
+  const executeResetData = async () => {
+    try {
+      setIsLoading(true);
+      
+      // 1. 파이어베이스에 있는 모든 포트폴리오 아이템 삭제 후 초기값으로 세팅
+      const currentItems = [...items];
+      for (const item of currentItems) {
+        await deletePortfolioItemFromFirebase(item.id);
+      }
+      for (const item of INITIAL_ITEMS) {
+        await savePortfolioItemToFirebase(item);
+      }
+      
+      // 2. 파이어베이스 설정 데이터 복구
+      await saveSiteSettingsToFirebase(INITIAL_SETTINGS);
+      
+      // 3. 상태 일괄 선언
+      setItems(INITIAL_ITEMS);
+      setSettings(INITIAL_SETTINGS);
+      
+      // 이전 호환성용 로컬스토리지는 보너스로 청소
+      localStorage.setItem('sallys_items', JSON.stringify(INITIAL_ITEMS));
+      localStorage.setItem('sallys_settings', JSON.stringify(INITIAL_SETTINGS));
+      localStorage.removeItem('sallys_inquiries');
+    } catch (err) {
+      console.error("데이터 초기화 실패: ", err);
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-white" style={{ backgroundColor: settings?.bgColor || '#FFFFFF' }}>
+        <div className="flex flex-col items-center gap-4 animate-pulse">
+          <Loader2 className="h-10 w-10 animate-spin" style={{ color: settings?.accentColor || '#F3C623' }} />
+          <p className="text-sm font-semibold text-gray-500 tracking-wider font-mono">Loading Sally's Law database...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div 

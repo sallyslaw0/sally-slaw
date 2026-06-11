@@ -12,6 +12,7 @@ import {
   Upload, Star, Trash, Link as LinkIcon, Search, FolderOpen, X,
   ChevronDown, ChevronUp
 } from 'lucide-react';
+import { savePortfolioItemToFirebase, deletePortfolioItemFromFirebase, saveSiteSettingsToFirebase } from '../lib/firebase';
 
 interface AdminPanelProps {
   items: PortfolioItem[];
@@ -605,19 +606,25 @@ export const INITIAL_SETTINGS: SiteSettings = ${formattedSettings};
     let updatedItems: PortfolioItem[];
     if (exists) {
       updatedItems = items.map(item => item.id === validated.id ? validated : item);
-      triggerToast('포트폴리오 정보가 업데이트 되었습니다.');
     } else {
       updatedItems = [validated, ...items];
-      triggerToast('새로운 포트폴리오 프로젝트가 등록되었습니다.');
     }
 
     setItems(updatedItems);
+    
+    // Firebase 영구 업로드 및 동기화
+    savePortfolioItemToFirebase(validated)
+      .then(() => {
+        triggerToast(exists ? '포트폴리오 정보가 파이어베이스에 업데이트 되었습니다.' : '새로운 포트폴리오 프로젝트가 파이어베이스에 정상 등록되었습니다.');
+      })
+      .catch((err) => {
+        triggerToast('파이어베이스 저장 실패: ' + String(err));
+      });
     
     try {
       localStorage.setItem('sallys_items', JSON.stringify(updatedItems));
     } catch (error) {
       console.error('LocalStorage 저장 한도 초과 오류:', error);
-      triggerToast('로컬 브라우저 저장 한도가 가득 찼습니다. 불필요한 기존 프로젝트를 삭제하거나 저용량 이미지를 업로드해 주세요.');
     }
     
     setUrlInput(''); // Clean text field state securely
@@ -636,12 +643,33 @@ export const INITIAL_SETTINGS: SiteSettings = ${formattedSettings};
     const { id, title } = deleteConfirmState;
     const updated = items.filter(item => item.id !== id);
     setItems(updated);
+    
+    // Firebase에서 영구 삭제
+    deletePortfolioItemFromFirebase(id)
+      .then(() => {
+        triggerToast(`"${title}" 프로젝트가 파이어베이스에서 영구적으로 삭제되었습니다.`);
+      })
+      .catch((err) => {
+        triggerToast('파이어베이스 삭제 실패: ' + String(err));
+      });
+
     localStorage.setItem('sallys_items', JSON.stringify(updated));
-    triggerToast(`"${title}" 프로젝트가 영구적으로 삭제되었습니다.`);
     if (editingItem?.id === id) {
       setEditingItem(null);
     }
     setDeleteConfirmState({ isOpen: false, id: '', title: '' });
+  };
+
+  // Firebase에 전체 아이템의 포트폴리오 순서를 동기화하기 위한 헬퍼
+  const syncOrderToFirebase = async (updatedList: PortfolioItem[]) => {
+    try {
+      // 순서대로 Firebase 저장 처리
+      for (const item of updatedList) {
+        await savePortfolioItemToFirebase(item);
+      }
+    } catch (err) {
+      console.error("순서 파이어베이스 동기화 실패:", err);
+    }
   };
 
   const handleMoveUp = (index: number) => {
@@ -652,7 +680,8 @@ export const INITIAL_SETTINGS: SiteSettings = ${formattedSettings};
     updated[index - 1] = temp;
     setItems(updated);
     localStorage.setItem('sallys_items', JSON.stringify(updated));
-    triggerToast('게시 순서가 한 단계 상승했습니다.');
+    syncOrderToFirebase(updated);
+    triggerToast('게시 순서가 상승하여 파이어베이스에 동기화되었습니다.');
   };
 
   const handleMoveDown = (index: number) => {
@@ -663,7 +692,8 @@ export const INITIAL_SETTINGS: SiteSettings = ${formattedSettings};
     updated[index + 1] = temp;
     setItems(updated);
     localStorage.setItem('sallys_items', JSON.stringify(updated));
-    triggerToast('게시 순서가 한 단계 하락했습니다.');
+    syncOrderToFirebase(updated);
+    triggerToast('게시 순서가 하락하여 파이어베이스에 동기화되었습니다.');
   };
 
   // 2. Settings Handlers
@@ -675,7 +705,13 @@ export const INITIAL_SETTINGS: SiteSettings = ${formattedSettings};
 
   const handleSaveSettings = () => {
     localStorage.setItem('sallys_settings', JSON.stringify(settings));
-    triggerToast('디자인 테마 및 소셜 설정이 즉각 반영·저장 테이블에 저장되었습니다.');
+    saveSiteSettingsToFirebase(settings)
+      .then(() => {
+        triggerToast('디자인 테마 및 소셜 설정이 파이어베이스 서버에 반영·저장되었습니다.');
+      })
+      .catch((err) => {
+        triggerToast('파이어베이스 설정 업로드 실패: ' + String(err));
+      });
   };
 
   return (
