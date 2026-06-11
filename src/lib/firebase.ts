@@ -26,14 +26,47 @@ const firebaseConfig = {
   appId: (import.meta as any).env.VITE_FIREBASE_APP_ID,
 };
 
-// Firebase 앱 및 Firestore 생성
+// Firebase 설정이 유효한지 검증하는 헬퍼
+export function isFirebaseConfigValid(): boolean {
+  const cfg = firebaseConfig;
+  // 빈 문자열이거나 플레이스홀더 껍데기가 남아있는 경우 비활성화 처리
+  if (
+    !cfg.apiKey || 
+    !cfg.projectId || 
+    cfg.apiKey.trim() === '' || 
+    cfg.apiKey.includes('[') || 
+    cfg.projectId.includes('[')
+  ) {
+    return false;
+  }
+  return true;
+}
+
+// 1.5초 타임아웃을 강제하여 무한 로딩을 완벽하게 예방하는 제네릭 헬퍼
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage = 'Timeout'): Promise<T> {
+  let timeoutId: any;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(errorMessage));
+    }, timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    clearTimeout(timeoutId);
+  });
+}
+
+// Firebase 앱 및 Firestore 생성 (유효할 때만 초기화 권장, 혹은 기본 초기화 진행)
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 
 // --- Connection Test (As required by system-skill) ---
 export async function testConnection() {
+  if (!isFirebaseConfigValid()) {
+    console.warn("Invalid Firebase Config - Skinned Connection Test.");
+    return;
+  }
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    await withTimeout(getDocFromServer(doc(db, 'test', 'connection')), 1500, 'Test connection timeout');
     console.log("Firebase Connection verified successfully.");
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
@@ -82,8 +115,15 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
  */
 export async function fetchPortfolioItemsFromFirebase(): Promise<PortfolioItem[]> {
   const collectionPath = 'portfolioItems';
+  if (!isFirebaseConfigValid()) {
+    throw new Error('Firebase configuration is missing or invalid.');
+  }
   try {
-    const snapshot = await getDocs(collection(db, collectionPath));
+    const snapshot = await withTimeout(
+      getDocs(collection(db, collectionPath)),
+      2000,
+      'Firebase load items timed out'
+    );
     const items: PortfolioItem[] = [];
     snapshot.forEach((document) => {
       const data = document.data();
@@ -149,9 +189,16 @@ export async function deletePortfolioItemFromFirebase(itemId: string): Promise<v
  */
 export async function fetchSiteSettingsFromFirebase(): Promise<SiteSettings | null> {
   const documentPath = 'settings/main';
+  if (!isFirebaseConfigValid()) {
+    throw new Error('Firebase configuration is missing or invalid.');
+  }
   try {
     const docRef = doc(db, 'settings', 'main');
-    const snapshot = await getDoc(docRef);
+    const snapshot = await withTimeout(
+      getDoc(docRef),
+      2000,
+      'Firebase load settings timed out'
+    );
     if (snapshot.exists()) {
       return snapshot.data() as SiteSettings;
     }
