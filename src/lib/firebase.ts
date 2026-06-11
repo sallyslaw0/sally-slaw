@@ -151,6 +151,10 @@ export async function fetchPortfolioItemsFromFirebase(): Promise<PortfolioItem[]
  * 포트폴리오 개별 아이템 저장 또는 업데이트
  */
 export async function savePortfolioItemToFirebase(item: PortfolioItem): Promise<void> {
+  if (!isFirebaseConfigValid()) {
+    console.warn("Firebase config is invalid. Skipping remote save, item preserved in localStorage.");
+    return Promise.resolve();
+  }
   const documentPath = `portfolioItems/${item.id}`;
   try {
     const docRef = doc(db, 'portfolioItems', item.id);
@@ -175,6 +179,10 @@ export async function savePortfolioItemToFirebase(item: PortfolioItem): Promise<
  * 포트폴리오 아이템 삭제
  */
 export async function deletePortfolioItemFromFirebase(itemId: string): Promise<void> {
+  if (!isFirebaseConfigValid()) {
+    console.warn("Firebase config is invalid. Skipping remote delete, item removed from localStorage.");
+    return Promise.resolve();
+  }
   const documentPath = `portfolioItems/${itemId}`;
   try {
     const docRef = doc(db, 'portfolioItems', itemId);
@@ -212,6 +220,10 @@ export async function fetchSiteSettingsFromFirebase(): Promise<SiteSettings | nu
  * 사이트 글로벌 설정 저장
  */
 export async function saveSiteSettingsToFirebase(settings: SiteSettings): Promise<void> {
+  if (!isFirebaseConfigValid()) {
+    console.warn("Firebase config is invalid. Skipping remote settings save.");
+    return Promise.resolve();
+  }
   const documentPath = 'settings/main';
   try {
     const docRef = doc(db, 'settings', 'main');

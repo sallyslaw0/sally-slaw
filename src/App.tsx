@@ -25,7 +25,8 @@ import {
   fetchSiteSettingsFromFirebase, 
   savePortfolioItemToFirebase, 
   saveSiteSettingsToFirebase,
-  deletePortfolioItemFromFirebase
+  deletePortfolioItemFromFirebase,
+  isFirebaseConfigValid
 } from './lib/firebase';
 
 export default function App() {
@@ -53,30 +54,83 @@ export default function App() {
       try {
         setIsLoading(true);
         
-        // 1. Firebase에서 포트폴리오 로드
-        let firebaseItems = await fetchPortfolioItemsFromFirebase();
+        let firebaseItems: PortfolioItem[] = [];
+        let firebaseSettings: SiteSettings | null = null;
         
-        // 만약 파이어베이스가 최초 상태라 비어있다면, 디폴트 데이터를 클라이언트 상태에 로컬 폴백으로 세팅
-        if (!firebaseItems || firebaseItems.length === 0) {
-          console.log("Firebase is empty. Falling back to default portfolio items on client-side.");
-          firebaseItems = INITIAL_ITEMS;
+        const validConfig = isFirebaseConfigValid();
+        
+        if (validConfig) {
+          try {
+            // 1. Firebase에서 포트폴리오 로드
+            firebaseItems = await fetchPortfolioItemsFromFirebase();
+          } catch (err) {
+            console.error("Firebase fetch items failed:", err);
+          }
+          
+          try {
+            // 2. Firebase에서 글로벌 디자인 설정 로드
+            firebaseSettings = await fetchSiteSettingsFromFirebase();
+          } catch (err) {
+            console.error("Firebase fetch settings failed:", err);
+          }
+        } else {
+          console.log("Firebase config resides on default placeholder or is invalid. Engaging local storage persistence.");
         }
-        setItems(firebaseItems);
 
-        // 2. Firebase에서 글로벌 디자인 설정 로드
-        let firebaseSettings = await fetchSiteSettingsFromFirebase();
-        
-        // 만약 설정이 비어있다면, 디폴트 설정을 클라이언트 상태에 로컬 폴백으로 세팅
-        if (!firebaseSettings) {
-          console.log("Firebase setting is empty. Falling back to default settings on client-side.");
-          firebaseSettings = INITIAL_SETTINGS;
+        // --- Items State Recovery ---
+        if (firebaseItems && firebaseItems.length > 0) {
+          setItems(firebaseItems);
+          // Sync to localStorage
+          localStorage.setItem('sallys_items', JSON.stringify(firebaseItems));
+        } else {
+          // If empty/failed on Firebase, try to recover from localStorage
+          const localSaved = localStorage.getItem('sallys_items');
+          if (localSaved) {
+            try {
+              setItems(JSON.parse(localSaved));
+            } catch {
+              setItems(INITIAL_ITEMS);
+            }
+          } else {
+            setItems(INITIAL_ITEMS);
+          }
         }
-        setSettings(firebaseSettings);
+
+        // --- Settings State Recovery ---
+        if (firebaseSettings) {
+          setSettings(firebaseSettings);
+          // Sync to localStorage
+          localStorage.setItem('sallys_settings', JSON.stringify(firebaseSettings));
+        } else {
+          // If empty/failed on Firebase, try to recover from localStorage
+          const localSettings = localStorage.getItem('sallys_settings');
+          if (localSettings) {
+            try {
+              setSettings(JSON.parse(localSettings));
+            } catch {
+              setSettings(INITIAL_SETTINGS);
+            }
+          } else {
+            setSettings(INITIAL_SETTINGS);
+          }
+        }
+
       } catch (err) {
         console.error("Firebase 로딩 실패, 로컬 폴백 모드 가동", err);
-        // 만약 통신 에러가 나더라도 UI가 정상 출력될 수 있도록 기동 보장
-        setItems(INITIAL_ITEMS);
-        setSettings(INITIAL_SETTINGS);
+        // 최종 기동 보장을 위한 극약 처방
+        const localSaved = localStorage.getItem('sallys_items');
+        if (localSaved) {
+          try { setItems(JSON.parse(localSaved)); } catch { setItems(INITIAL_ITEMS); }
+        } else {
+          setItems(INITIAL_ITEMS);
+        }
+        
+        const localSettings = localStorage.getItem('sallys_settings');
+        if (localSettings) {
+          try { setSettings(JSON.parse(localSettings)); } catch { setSettings(INITIAL_SETTINGS); }
+        } else {
+          setSettings(INITIAL_SETTINGS);
+        }
       } finally {
         setIsLoading(false);
       }
