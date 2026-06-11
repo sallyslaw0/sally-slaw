@@ -12,7 +12,7 @@ import {
   Upload, Star, Trash, Link as LinkIcon, Search, FolderOpen, X,
   ChevronDown, ChevronUp
 } from 'lucide-react';
-import { savePortfolioItemToFirebase, deletePortfolioItemFromFirebase, saveSiteSettingsToFirebase } from '../lib/firebase';
+import { savePortfolioItemToFirebase, deletePortfolioItemFromFirebase, saveSiteSettingsToFirebase, isFirebaseConfigValid } from '../lib/firebase';
 
 interface AdminPanelProps {
   items: PortfolioItem[];
@@ -799,6 +799,41 @@ export const INITIAL_SETTINGS: SiteSettings = ${formattedSettings};
         <div className="fixed top-5 right-5 z-50 flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm font-medium text-white shadow-2xl animate-bounce">
           <Check className="h-4 w-4 text-emerald-400" />
           <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Firebase Database Connection Banner */}
+      {!isFirebaseConfigValid() && (
+        <div className="mt-5 rounded-xl border border-rose-200 bg-rose-50/50 p-4 animate-fadeIn">
+          <div className="flex items-start gap-3">
+            <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 text-white font-extrabold text-xs">!</div>
+            <div className="space-y-1">
+              <h4 className="text-xs font-bold text-rose-800">
+                🚨 로컬 브라우저 저장 모드 가동 중 (스마트폰 연동 안내)
+              </h4>
+              <p className="text-[11px] text-rose-700 leading-relaxed">
+                현재 <strong>파이어베이스(Firebase) 데이터베이스 환경 변수</strong>가 이 브라우저 웹사이트 빌드에 내장되어 있지 않습니다.
+                이 상태에서 추가/수정한 포트폴리오는 <strong>현재 등록 작업을 수행한 해당 PC 기기의 브라우저(localStorage)에만 안전하게 보관</strong>됩니다.
+              </p>
+              <p className="text-[11px] text-rose-700 leading-relaxed font-semibold">
+                👉 그렇기 때문에 스마트폰이나 다른 컴퓨터로 접속했을 때는 업로드된 포트폴리오가 보이지 않습니다!
+              </p>
+              <div className="text-[10px] text-gray-500 mt-2 bg-white/70 rounded-lg p-3 border border-rose-100 space-y-1.5 leading-relaxed">
+                <span className="font-bold text-gray-800 block">💡 다른 기기(스마트폰 등)와 실시간 연동을 활성화하는 두 가지 방법:</span>
+                <div>
+                  <span className="font-bold text-rose-700">방법 A. [비용 0원] 정적 수동 동기화 (가장 빠르고 강력 추천):</span><br />
+                  상단 <strong>[깃허브 배포 동기화]</strong> 탭으로 이동하셔서 <strong>[initialData.ts 파일 즉시 다운로드]</strong> 단추를 클릭해 다운로드받은 파일로 프로젝트 내 <code>src/data/initialData.ts</code> 파일을 교체하고 깃허브에 푸시(Push)하세요! 사이트가 다시 배포되며 스마트폰을 포함한 모든 사람들에게 완벽하게 보입니다.
+                </div>
+                <div className="pt-1 border-t border-dashed border-gray-200">
+                  <span className="font-bold text-rose-700">방법 B. 실시간 파이어베이스 연동:</span><br />
+                  깃허브 리포지토리의 <strong>Settings - Secrets and variables - Actions</strong>에 아래 환경 변수(Secrets)들을 등록하고 다시 커밋/빌드하시면 스마트폰과도 실시간으로 포트폴리오 데이터가 무결하게 상호 공유됩니다:
+                  <code className="block mt-1 p-1 bg-gray-100 text-[10px] text-gray-850 rounded font-normal font-mono break-all leading-normal">
+                    VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_STORAGE_BUCKET, VITE_FIREBASE_MESSAGING_SENDER_ID, VITE_FIREBASE_APP_ID
+                  </code>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
