@@ -1527,9 +1527,9 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
                 <thead>
                   <tr className="bg-gray-50 text-gray-600 font-bold border-b border-gray-100">
                     <th className="px-4 py-3 w-16 text-center">순서</th>
-                    <th className="px-4 py-3 w-28">연도</th>
-                    <th className="px-4 py-3 w-64">프로젝트 명</th>
-                    <th className="px-4 py-3">세부 내용</th>
+                    <th className="px-4 py-3 w-24">연도</th>
+                    <th className="px-4 py-3 w-[55%]">프로젝트 명</th>
+                    <th className="px-4 py-3 w-[25%]">세부 내용</th>
                     <th className="px-4 py-3 w-32 text-right">이동 / 편집</th>
                   </tr>
                 </thead>
@@ -1559,7 +1559,7 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
                         </td>
 
                         {/* 내용 */}
-                        <td className="px-4 py-3 text-gray-500 leading-relaxed font-sans cell-wrap max-w-sm">
+                        <td className="px-4 py-3 text-gray-500 leading-relaxed font-sans cell-wrap">
                           {item.description}
                         </td>
 

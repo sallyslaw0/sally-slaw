@@ -485,23 +485,23 @@ export default function App() {
       </main>
 
       {/* HISTORY & MILESTONES SECTION */}
-      <section id="history" className="py-20 border-t border-gray-100 scroll-mt-16" style={{ backgroundColor: `${settings.bgColor}33` }}>
+      <section id="history" className="py-14 border-t border-gray-100 scroll-mt-16" style={{ backgroundColor: `${settings.bgColor}33` }}>
         <div className="mx-auto max-w-4xl px-6">
-          <div className="mb-12 space-y-2 text-center">
+          <div className="mb-8 space-y-2 text-center">
             <span className="text-[10px] font-mono font-bold tracking-widest text-[#666666] uppercase flex items-center justify-center gap-1">
-              <Sparkles className="h-3.5 w-3.5 text-amber-500" style={{ color: settings.accentColor }} /> STUDIO HISTORY
+              <Sparkles className="h-3.5 w-3.5 text-amber-500" style={{ color: settings.accentColor }} /> HISTORY
             </span>
             <h2 className="text-2xl font-black tracking-tight text-[#1A1A1A] sm:text-3xl font-custom-heading">
-              스튜디오 이력
+              공연 관람&기록 이력
             </h2>
             <p className="text-xs text-[#666666] max-w-md mx-auto leading-relaxed">
-              샐리의 법칙 아틀리에가 걸어온 창작 활동과 공식 프로젝트 수행 기록입니다.
+              {"Sally's Law의 공연 관람&기록 이력입니다."}
             </p>
           </div>
 
           <div className="divide-y divide-gray-100/80 border-t border-b border-gray-200 font-sans">
             {historyItems.length === 0 ? (
-              <div className="py-12 text-center text-xs text-gray-400 font-mono">
+              <div className="py-8 text-center text-xs text-gray-400 font-mono">
                 No history records found.
               </div>
             ) : (
@@ -515,21 +515,21 @@ export default function App() {
                 .map((item) => (
                   <div 
                     key={item.id} 
-                    className="flex flex-col sm:flex-row sm:items-center py-5 gap-3 sm:gap-8 hover:bg-gray-50/50 px-4 -mx-4 transition-all duration-200 rounded-lg group"
+                    className="flex flex-col sm:flex-row sm:items-center py-2.5 gap-2 sm:gap-8 hover:bg-gray-50/50 px-4 -mx-4 transition-all duration-200 rounded-lg group"
                   >
                     {/* 연도 */}
                     <div 
-                      className="w-20 shrink-0 font-mono font-bold text-lg text-gray-400 group-hover:text-amber-500 transition-colors duration-200"
+                      className="w-20 shrink-0 font-mono font-bold text-base text-gray-400 group-hover:text-amber-500 transition-colors duration-200"
                     >
                       {item.year}
                     </div>
                     
                     {/* 프로젝트 명 & 내용 (하나의 줄 형태) */}
-                    <div className="flex-1 min-w-0 sm:flex sm:items-baseline sm:justify-between sm:gap-6">
-                      <div className="font-bold text-[15px] text-gray-900 leading-snug truncate sm:w-[40%]">
+                    <div className="flex-1 min-w-0 sm:flex sm:items-baseline sm:justify-between sm:gap-8">
+                      <div className="font-bold text-[14px] text-gray-900 leading-snug sm:w-[70%] whitespace-normal break-keep">
                         {item.projectName}
                       </div>
-                      <div className="text-xs text-gray-500 font-normal leading-relaxed mt-1 sm:mt-0 sm:flex-1 font-sans">
+                      <div className="text-xs text-gray-500 font-normal leading-relaxed mt-1 sm:mt-0 sm:w-[25%] sm:text-right font-sans shrink-0">
                         {item.description}
                       </div>
                     </div>
