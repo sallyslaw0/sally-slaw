@@ -81,11 +81,11 @@ export default function PortfolioDetailModal({ item, onClose }: PortfolioDetailM
                   </p>
                 </div>
               ) : (
-                <div className="relative aspect-video w-full overflow-hidden rounded-xl shadow-lg bg-black group select-none flex items-center justify-center">
+                <div className="relative w-full overflow-hidden rounded-xl shadow-lg bg-gray-100 group select-none flex items-center justify-center min-h-[280px] sm:min-h-[360px] md:min-h-[440px]">
                   <img
                     src={images[activeIdx]}
                     alt={`${item.title} - 이미지 ${activeIdx + 1}`}
-                    className="h-full w-full object-contain max-h-[400px] md:max-h-[500px]"
+                    className="w-full h-auto max-h-[420px] md:max-h-[500px] object-contain rounded-lg p-1"
                     referrerPolicy="no-referrer"
                   />
                   

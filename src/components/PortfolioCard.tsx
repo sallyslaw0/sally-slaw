@@ -28,7 +28,7 @@ export default function PortfolioCard({ item, onClick }: PortfolioCardProps) {
     >
       <div className="space-y-4">
         {/* Visual Cover */}
-        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-lg bg-gray-50">
+        <div className="relative aspect-[3/2] w-full overflow-hidden rounded-lg bg-gray-50/50">
           <img
             src={item.imageUrl}
             alt={item.title}
