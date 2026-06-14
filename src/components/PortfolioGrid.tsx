@@ -19,24 +19,48 @@ export default function PortfolioGrid({ items, onItemClick, mediaType, setMediaT
   const [selectedCategory, setSelectedCategory] = useState<string>('전체');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Count items for headers
-  const totalCount = items.length;
-  const photoCount = items.filter(item => !item.youtubeUrl).length;
-  const videoCount = items.filter(item => !!item.youtubeUrl).length;
+  const categories = [
+    '전체',
+    'Artist(아티스트)',
+    'Stage(무대)',
+    'Concert hall landscape(공연장)',
+    'Audience(관람객)',
+    'etc(기타)',
+    'Video(영상)'
+  ];
 
-  // Extract all categories dynamically to prevent desync based on current mediaType
-  const currentMediaItems = items.filter(item => {
-    if (mediaType === 'photo') return !item.youtubeUrl;
-    if (mediaType === 'video') return !!item.youtubeUrl;
-    return true;
-  });
+  // Helper matching function for backward compatibility
+  const matchesCategorySelection = (itemCategory: string, selected: string, isVideo: boolean) => {
+    if (selected === '전체') return true;
+    
+    const cat = itemCategory ? itemCategory.trim() : '';
 
-  const categories = ['전체', '아티스트', '무대', '공연장', '관람객', '기타'];
+    if (selected === 'Artist(아티스트)') {
+      return cat === 'Artist(아티스트)' || cat === '아티스트';
+    }
+    if (selected === 'Stage(무대)') {
+      return cat === 'Stage(무대)' || cat === '무대';
+    }
+    if (selected === 'Concert hall landscape(공연장)') {
+      return cat === 'Concert hall landscape(공연장)' || cat === '공연장';
+    }
+    if (selected === 'Audience(관람객)') {
+      return cat === 'Audience(관람객)' || cat === '관람객';
+    }
+    if (selected === 'etc(기타)') {
+      return cat === 'etc(기타)' || cat === '기타';
+    }
+    if (selected === 'Video(영상)') {
+      return cat === 'Video(영상)' || cat === '영상' || isVideo;
+    }
+
+    return cat === selected;
+  };
 
   // Filtering combined algorithm
-  const filteredItems = currentMediaItems.filter(item => {
+  const filteredItems = items.filter(item => {
     // 1. Category Filter
-    const matchesCategory = selectedCategory === '전체' || item.category === selectedCategory;
+    const matchesCategory = matchesCategorySelection(item.category, selectedCategory, !!item.youtubeUrl);
 
     // 2. Search Filter
     const matchesSearch = 
@@ -50,63 +74,6 @@ export default function PortfolioGrid({ items, onItemClick, mediaType, setMediaT
 
   return (
     <div className="space-y-8">
-      {/* 1. Primary Global Board Segregation Tabs: Photo vs Video */}
-      <div className="flex justify-center p-1 bg-gray-100 rounded-2xl max-w-xl mx-auto shadow-inner border border-gray-200/50">
-        <button
-          onClick={() => {
-            setMediaType('all');
-            setSelectedCategory('전체');
-          }}
-          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold transition-all duration-300 cursor-pointer ${
-            mediaType === 'all'
-              ? 'bg-white text-gray-950 shadow-md transform scale-[1.02]'
-              : 'text-gray-500 hover:text-gray-900'
-          }`}
-        >
-          <Layers className="h-4 w-4" />
-          <span>전체 통합 포트폴리오</span>
-          <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded-full font-mono text-gray-600 font-bold">
-            {totalCount}
-          </span>
-        </button>
-
-        <button
-          onClick={() => {
-            setMediaType('photo');
-            setSelectedCategory('전체');
-          }}
-          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold transition-all duration-300 cursor-pointer ${
-            mediaType === 'photo'
-              ? 'bg-amber-400 text-gray-950 shadow-md transform scale-[1.02]'
-              : 'text-gray-500 hover:text-amber-500'
-          }`}
-        >
-          <ImageIcon className="h-4 w-4" />
-          <span>사진 포트폴리오</span>
-          <span className="text-[10px] bg-black/5 px-1.5 py-0.5 rounded-full font-mono text-gray-700 font-bold">
-            {photoCount}
-          </span>
-        </button>
-
-        <button
-          onClick={() => {
-            setMediaType('video');
-            setSelectedCategory('전체');
-          }}
-          className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-bold transition-all duration-300 cursor-pointer ${
-            mediaType === 'video'
-              ? 'bg-amber-400 text-gray-950 shadow-md transform scale-[1.02]'
-              : 'text-gray-500 hover:text-amber-500'
-          }`}
-        >
-          <Film className="h-4 w-4" />
-          <span>영상 포트폴리오</span>
-          <span className="text-[10px] bg-black/5 px-1.5 py-0.5 rounded-full font-mono text-gray-700 font-bold">
-            {videoCount}
-          </span>
-        </button>
-      </div>
-
       {/* 2. Sub-categories and Search Hub Panel */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-y border-gray-100 py-5">
         
@@ -118,7 +85,7 @@ export default function PortfolioGrid({ items, onItemClick, mediaType, setMediaT
               onClick={() => setSelectedCategory(category)}
               className={`rounded-full px-4 py-1.5 text-xs font-semibold tracking-wide transition-all duration-300 select-none cursor-pointer ${
                 selectedCategory === category
-                  ? 'bg-gray-905 text-white shadow-xs'
+                  ? 'bg-gray-905 text-white shadow-xs font-bold'
                   : 'bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-800'
               }`}
             >

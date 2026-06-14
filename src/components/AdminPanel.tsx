@@ -121,6 +121,7 @@ export default function AdminPanel({
   const [formMediaType, setFormMediaType] = useState<'photo' | 'video'>('photo');
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [isImportLoading, setIsImportLoading] = useState(false);
 
   const generateInitialDataCode = (): string => {
     // Generate clean output formatting
@@ -168,6 +169,113 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
       triggerToast('동기화용 TypeScript 코드가 클립보드에 복사되었습니다!');
     } catch {
       triggerToast('클립보드 복사 실패. 텍스트를 선택하여 직접 복사해 주세요.');
+    }
+  };
+
+  const handleExportBackup = () => {
+    try {
+      const backupData = {
+        backupVersion: "1.0",
+        backupDate: new Date().toISOString(),
+        settings: settings,
+        items: items,
+        historyItems: historyItems
+      };
+      const jsonStr = JSON.stringify(backupData, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      const safeTitle = settings.siteTitle ? settings.siteTitle.replace(/[^a-zA-Z0-0ㄱ-ㅎㅏ-ㅣ가-힣_]/g, '_') : 'sallys_law';
+      const dateStr = new Date().toISOString().slice(0, 10);
+      link.download = `${safeTitle}_backup_${dateStr}.json`;
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      triggerToast('백업용 JSON 파일 다운로드가 완료되었습니다. 안전한 곳에 보관해 주세요!');
+    } catch (err) {
+      console.error(err);
+      triggerToast('백업 파일 내보내기 실패: ' + String(err));
+    }
+  };
+
+  const handleImportBackup = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const confirmImport = window.confirm(
+      "★ 데이터 복원 경고 ★\n\n백업 파일을 가져오면 현재 등록된 모든 포트폴리오(공연 기록), 공연 관람 및 이력, 그리고 사이트 디자인 설정이 백업 시점으로 완전히 덮어씌워지고 대체됩니다.\n\n이 변경은 최신 데이터베이스와 로컬 메모리에 즉각 반영됩니다.\n\n정말로 계속 진행하시겠습니까?"
+    );
+    if (!confirmImport) {
+      event.target.value = '';
+      return;
+    }
+
+    setIsImportLoading(true);
+    try {
+      const text = await file.text();
+      const backup = JSON.parse(text);
+
+      if (!backup || typeof backup !== 'object') {
+        throw new Error('유효한 JSON 구조가 아닙니다.');
+      }
+      if (!backup.items || !Array.isArray(backup.items)) {
+        throw new Error('백업 파일에 유효한 포트폴리오 아이템 목록(items)이 누락되었습니다.');
+      }
+      if (!backup.historyItems || !Array.isArray(backup.historyItems)) {
+        throw new Error('백업 파일에 유효한 이력 항목 목록(historyItems)이 누락되었습니다.');
+      }
+      if (!backup.settings || typeof backup.settings !== 'object') {
+        throw new Error('백업 파일에 유효한 사이트 설정(settings) 정보가 누락되었습니다.');
+      }
+
+      const importedItems: PortfolioItem[] = backup.items;
+      const importedHistory: HistoryItem[] = backup.historyItems;
+      const importedSettings: SiteSettings = backup.settings;
+
+      const validConfig = isFirebaseConfigValid();
+
+      if (validConfig) {
+        // Overwrite Firebase portfolio items
+        for (const item of items) {
+          try { await deletePortfolioItemFromFirebase(item.id); } catch (e) { console.error("Item delete error", e); }
+        }
+        for (const item of importedItems) {
+          await savePortfolioItemToFirebase(item);
+        }
+
+        // Overwrite Firebase history milestones
+        for (const h of historyItems) {
+          try { await deleteHistoryFromFirebase(h.id); } catch (e) { console.error("History delete error", e); }
+        }
+        for (const h of importedHistory) {
+          await saveHistoryToFirebase(h);
+        }
+
+        // Overwrite settings on Firebase
+        await saveSiteSettingsToFirebase(importedSettings);
+      }
+
+      // Synchronize in local dynamic React State
+      setItems(importedItems);
+      setHistoryItems(importedHistory);
+      setSettings(importedSettings);
+
+      // Save to localStorage fallback
+      localStorage.setItem('sallys_items', JSON.stringify(importedItems));
+      localStorage.setItem('sallys_history', JSON.stringify(importedHistory));
+      localStorage.setItem('sallys_settings', JSON.stringify(importedSettings));
+
+      triggerToast('🎉 백업 데이터 복원이 아주 성공적으로 완벽하게 완료되었습니다!');
+    } catch (err: any) {
+      console.error(err);
+      triggerToast('백업 복원 실패: ' + (err?.message || String(err)));
+    } finally {
+      setIsImportLoading(false);
+      event.target.value = '';
     }
   };
 
@@ -512,7 +620,7 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
       let currentImageUrls = editingItem?.imageUrls || (editingItem?.imageUrl ? [editingItem.imageUrl] : []);
       currentImageUrls = currentImageUrls.filter(url => !isPlaceholderImage(url));
       
-      const updatedUrls = [...currentImageUrls, optimizedBase64];
+      const updatedUrls = [optimizedBase64];
       const updatedCover = optimizedBase64;
       
       setEditingItem(prev => prev ? {
@@ -521,7 +629,7 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
         imageUrls: updatedUrls
       } : null);
       
-      triggerToast(`구글 드라이브의 "${file.name}" 사진을 다운로드하여 정상 동기화했습니다.`);
+      triggerToast(`구글 드라이브의 "${file.name}" 사진을 다운로드하여 단일 대표 이미지로 설정했습니다.`);
       setIsDriveModalOpen(false);
     } catch (err: any) {
       console.error('File import error:', err);
@@ -559,15 +667,8 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
       const uploadPromises = files.map(file => resizeImage(file, 850, 850));
       const base64Images = await Promise.all(uploadPromises);
       
-      let currentImageUrls = editingItem?.imageUrls || (editingItem?.imageUrl ? [editingItem.imageUrl] : []);
-      // 임시 플레이스홀더 이미지(샘플 이미지)는 새 커스텀 이미지를 올렸으므로 완전히 교체하기 위해 리스트에서 비웁니다.
-      currentImageUrls = currentImageUrls.filter(url => !isPlaceholderImage(url));
-      
-      const updatedUrls = [...currentImageUrls, ...base64Images];
-      
-      // 새 사진을 컴퓨터에서 업로드한 경우, 사용자가 수정한 주 사진으로 즉시 판단하여 
-      // 대표 표지 이미지(cover / imageUrl)를 방금 올린 이미지로 자동 지정합니다.
-      const updatedCover = base64Images[0] || (currentImageUrls.length > 0 ? currentImageUrls[0] : '');
+      const updatedCover = base64Images[0] || '';
+      const updatedUrls = updatedCover ? [updatedCover] : [];
       
       setEditingItem(prev => prev ? {
         ...prev,
@@ -575,7 +676,7 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
         imageUrls: updatedUrls
       } : null);
       
-      triggerToast(`${files.length}개의 새로운 사진이 압축되어 정상 업로드되었습니다.`);
+      triggerToast(`단일 대표 이미지가 압축되어 정상 업로드되었습니다.`);
     } catch (error) {
       console.error(error);
       triggerToast('이미지 처리 중 또는 압축 과정에서 오류가 발생했습니다.');
@@ -590,17 +691,7 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
     if (!urlInput.trim()) return;
     
     const targetUrl = urlInput.trim();
-    let currentUrls = editingItem?.imageUrls || (editingItem?.imageUrl ? [editingItem.imageUrl] : []);
-    // 임시 플레이스홀더 이미지(샘플 이미지)는 새 커스텀 이미지를 추가했으므로 제거합니다.
-    currentUrls = currentUrls.filter(url => !isPlaceholderImage(url));
-
-    if (currentUrls.some(url => url === targetUrl)) {
-      triggerToast('이미 등록된 이미지 주소입니다.');
-      return;
-    }
-    
-    const updatedUrls = [...currentUrls, targetUrl];
-    // 웹 주소 추가 시에도 새 이미지를 편리하게 즉시 대표 표지 이미지로 설정합니다.
+    const updatedUrls = [targetUrl];
     const updatedCover = targetUrl;
     
     setEditingItem(prev => prev ? {
@@ -610,34 +701,17 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
     } : null);
     
     setUrlInput('');
-    triggerToast('새 웹 이미지가 추가되었으며, 대표 이미지로 자동 지정되었습니다.');
+    triggerToast('새 웹 이미지가 등록되어 대표 이미지로 지정되었습니다.');
   };
 
-  const handleSetCoverImage = (url: string) => {
+  const handleDeleteImage = () => {
     setEditingItem(prev => prev ? {
       ...prev,
-      imageUrl: url
-    } : null);
-    triggerToast('선택한 이미지가 대표/커버 이미지로 설정되었습니다.');
-  };
-
-  const handleDeleteImage = (indexToDelete: number) => {
-    const currentUrls = editingItem?.imageUrls || (editingItem?.imageUrl ? [editingItem.imageUrl] : []);
-    const urlToDelete = currentUrls[indexToDelete];
-    const updatedUrls = currentUrls.filter((_, idx) => idx !== indexToDelete);
-    
-    let updatedCover = editingItem?.imageUrl || '';
-    if (updatedCover === urlToDelete) {
-      updatedCover = updatedUrls[0] || '';
-    }
-    
-    setEditingItem(prev => prev ? {
-      ...prev,
-      imageUrl: updatedCover,
-      imageUrls: updatedUrls
+      imageUrl: '',
+      imageUrls: []
     } : null);
     
-    triggerToast('이미지가 리스트에서 삭제되었습니다.');
+    triggerToast('등록된 이미지가 해제되었습니다.');
   };
 
   // 1. Content CRUD Handlers
@@ -647,7 +721,7 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
     setEditingItem({
       id: `item-${Date.now()}`,
       title: '',
-      category: mode === 'photo' ? '아티스트' : '기타',
+      category: mode === 'photo' ? 'Artist(아티스트)' : 'Video(영상)',
       summary: '',
       description: '',
       imageUrl: initialImg,
@@ -673,66 +747,33 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
 
     let finalImageUrl = editingItem.imageUrl || '';
     let finalYoutubeUrl = editingItem.youtubeUrl || '';
-    let finalImageUrls = [...(editingItem.imageUrls || [])];
 
-    // 사용자가 입력 칸에 웹 이미지 주소를 넣어놓고 실수로 [추가] 버튼을 안 눌렀을 때를 대비해 자동 임포트 처리
+    // If the user pasted a direct URL but forgot to submit, use it
     if (urlInput.trim()) {
-      const typedUrl = urlInput.trim();
-      // 기존에 들어있던 플레이스홀더(샘플 이미지)는 커스텀 이미지가 수동 등록되었으므로 말끔히 제거
-      finalImageUrls = finalImageUrls.filter(url => !isPlaceholderImage(url));
-      
-      if (!finalImageUrls.includes(typedUrl)) {
-        finalImageUrls.push(typedUrl);
-      }
-      if (isPlaceholderImage(finalImageUrl) || !finalImageUrl) {
-        finalImageUrl = typedUrl;
-      }
+      finalImageUrl = urlInput.trim();
     }
 
     if (formMediaType === 'photo') {
       finalYoutubeUrl = ''; // Clear video URL explicitly
-      
-      // 만약 플레이스홀더만 들어있는 상태라면, 그리고 다른 커스텀 사진 입력/업로드가 이미 되었다면 플레이스홀더를 완전히 걸러냅니다.
-      const hasCustomImages = finalImageUrls.some(url => !isPlaceholderImage(url));
-      if (hasCustomImages) {
-        finalImageUrls = finalImageUrls.filter(url => !isPlaceholderImage(url));
-        if (isPlaceholderImage(finalImageUrl)) {
-          finalImageUrl = finalImageUrls[0] || '';
-        }
-      }
-
-      if (finalImageUrls.length === 0) {
-        if (finalImageUrl && !isPlaceholderImage(finalImageUrl)) {
-          finalImageUrls = [finalImageUrl];
-        } else {
-          finalImageUrl = 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?q=80&w=1200';
-          finalImageUrls = [finalImageUrl];
-        }
-      } else if (!finalImageUrl && finalImageUrls.length > 0) {
-        finalImageUrl = finalImageUrls[0];
+      if (!finalImageUrl || isPlaceholderImage(finalImageUrl)) {
+        finalImageUrl = 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?q=80&w=1200';
       }
     } else {
       // video mode
-      // Auto-generate high quality YouTube poster from video ID
       const videoId = getYoutubeVideoId(finalYoutubeUrl);
       if (videoId) {
-        const posterUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
-        if (!finalImageUrl || isPlaceholderImage(finalImageUrl)) finalImageUrl = posterUrl;
-        
-        // Remove placeholder to clean up
-        finalImageUrls = finalImageUrls.filter(url => !isPlaceholderImage(url));
-        if (!finalImageUrls.includes(posterUrl)) {
-          finalImageUrls = [posterUrl, ...finalImageUrls];
-        }
-      } else {
-        if (!finalImageUrl) finalImageUrl = 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?q=80&w=1200';
+        finalImageUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+      } else if (!finalImageUrl || isPlaceholderImage(finalImageUrl)) {
+        finalImageUrl = 'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?q=80&w=1200';
       }
     }
+
+    const finalImageUrls = finalImageUrl ? [finalImageUrl] : [];
 
     const validated: PortfolioItem = {
       id: editingItem.id,
       title: editingItem.title || '무제 프로젝트',
-      category: editingItem.category || '기타',
+      category: editingItem.category || 'etc(기타)',
       summary: editingItem.summary || '',
       description: editingItem.description || '',
       imageUrl: finalImageUrl,
@@ -1070,11 +1111,12 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
                         onChange={(e) => setEditingItem({ ...editingItem, category: e.target.value })}
                         className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:border-amber-400 focus:outline-hidden"
                       >
-                        <option value="아티스트">아티스트</option>
-                        <option value="무대">무대</option>
-                        <option value="공연장">공연장</option>
-                        <option value="관람객">관람객</option>
-                        <option value="기타">기타</option>
+                        <option value="Artist(아티스트)">Artist(아티스트)</option>
+                        <option value="Stage(무대)">Stage(무대)</option>
+                        <option value="Concert hall landscape(공연장)">Concert hall landscape(공연장)</option>
+                        <option value="Audience(관람객)">Audience(관람객)</option>
+                        <option value="etc(기타)">etc(기타)</option>
+                        <option value="Video(영상)">Video(영상)</option>
                       </select>
                     </div>
 
@@ -1162,67 +1204,41 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
                       </div>
                     )}
 
-                    {/* Integrated Multiple Image Upload & Manager */}
+                    {/* Single Image Upload & Manager */}
                     <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50/50 p-3.5">
                       <div className="flex items-center justify-between">
                         <label className="block text-xs font-bold text-gray-700 flex items-center gap-1">
-                          <Image className="h-3.5 w-3.5 text-amber-500" /> 등록된 포트폴리오 이미지
+                          <Image className="h-3.5 w-3.5 text-amber-500" /> 등록된 포트폴리오 이미지 (단일)
                         </label>
-                        <span className="text-[10px] text-gray-400 font-mono">
-                          총 {(editingItem.imageUrls || []).length}개
-                        </span>
                       </div>
 
-                      {/* Image Preview List with Touch-Friendly Layout (No Hover Barrier) */}
-                      {editingItem.imageUrls && editingItem.imageUrls.length > 0 ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 overflow-y-auto max-h-[220px] pr-1 pb-1">
-                          {editingItem.imageUrls.map((url, idx) => {
-                            const isCover = editingItem.imageUrl === url;
-                            return (
-                              <div key={idx} className="relative rounded-lg border border-gray-200 overflow-hidden bg-white flex flex-col shadow-xs group">
-                                <div className="relative aspect-video bg-gray-50 overflow-hidden">
-                                  <img
-                                    src={url}
-                                    alt="미리보기"
-                                    className="h-full w-full object-cover"
-                                    referrerPolicy="no-referrer"
-                                  />
-                                  {isCover && (
-                                    <div className="absolute top-1 left-1 bg-amber-400 text-gray-900 text-[8px] font-bold px-1.5 py-0.5 rounded shadow-xs flex items-center gap-0.5 select-none">
-                                      <Star className="h-2 w-2 fill-current animate-pulse" /> 대표
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex bg-gray-50 border-t border-gray-100 p-1 gap-1">
-                                  {!isCover ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleSetCoverImage(url)}
-                                      className="flex-1 text-[9px] font-semibold text-gray-650 bg-white hover:bg-amber-400 hover:text-gray-900 border border-gray-200 rounded py-1 transition-all cursor-pointer text-center"
-                                    >
-                                      대표로 지정
-                                    </button>
-                                  ) : (
-                                    <span className="flex-1 text-[9px] font-bold text-amber-600 bg-amber-50/50 rounded py-1 text-center select-none border border-amber-200/40">
-                                      대표 설정됨
-                                    </span>
-                                  )}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteImage(idx)}
-                                    className="text-[9px] font-semibold text-red-650 bg-white hover:bg-red-50 border border-gray-200 hover:border-red-200 rounded px-1.5 py-1 transition-all cursor-pointer text-center"
-                                    title="이미지 삭제"
-                                  >
-                                    삭제
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })}
+                      {/* Image Preview with delete control */}
+                      {editingItem.imageUrl ? (
+                        <div className="relative rounded-lg border border-gray-150 overflow-hidden bg-white max-w-sm mx-auto shadow-xs">
+                          <div className="aspect-video bg-gray-50 overflow-hidden flex items-center justify-center">
+                            <img
+                              src={editingItem.imageUrl}
+                              alt="포트폴리오 단일 이미지"
+                              className="max-h-full max-w-full object-contain"
+                              referrerPolicy="no-referrer"
+                            />
+                          </div>
+                          <div className="bg-gray-50 border-t border-gray-150 p-2 flex justify-between items-center text-xs">
+                            <span className="text-[10px] text-gray-500 truncate max-w-[200px] font-mono">
+                              {editingItem.imageUrl.startsWith('data:') ? '업로드된 파일 이미지' : editingItem.imageUrl}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleDeleteImage}
+                              className="text-[10px] bg-red-50 hover:bg-red-100 text-red-600 font-bold px-2.5 py-1 rounded border border-red-200 cursor-pointer transition-colors"
+                            >
+                              삭제
+                            </button>
+                          </div>
                         </div>
                       ) : (
                         <div className="text-center py-4 border border-dashed border-gray-250 rounded-lg text-[11px] text-gray-500 bg-white">
-                          등록된 이미지가 없습니다. 아래에서 이미지를 추가하세요.
+                          등록된 이미지가 없습니다. 아래 옵션을 연동하여 이미지를 등록해 주세요.
                         </div>
                       )}
 
@@ -1238,12 +1254,11 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
                             ) : (
                               <span className="flex items-center gap-1.5 text-gray-700">
                                 <Upload className="h-3.5 w-3.5 text-amber-500" /> 
-                                <span>내 컴퓨터에서 사진 올리기 (여러 장 선택 가능)</span>
+                                <span>내 컴퓨터에서 사진 불러오기 (단일 파일)</span>
                               </span>
                             )}
                             <input
                               type="file"
-                              multiple
                               accept="image/*"
                               disabled={isUploading}
                               onChange={handleFileUpload}
@@ -1257,7 +1272,7 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
                           <button
                             type="button"
                             onClick={handleOpenGoogleDrive}
-                            className="relative flex min-h-[46px] w-full cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-sky-200 bg-sky-50/10 px-3 py-1.5 text-center text-[11px] font-semibold text-sky-700 hover:bg-sky-50 hover:text-sky-850 transition-colors"
+                            className="relative flex min-h-[46px] w-full cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-sky-200 bg-sky-50/10 px-3 py-1.5 text-center text-[11px] font-semibold text-sky-700 hover:bg-sky-50 hover:text-sky-850 transition-colors cursor-pointer"
                           >
                             <svg className="h-4 w-4 mr-1.5 shrink-0" viewBox="0 0 48 48">
                               <path fill="#00E676" d="M16 35H4l10-18h12z"/>
@@ -1287,7 +1302,7 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
                             onClick={handleAddUrlImage}
                             className="rounded-md bg-gray-900 text-white px-3 py-1 text-[11px] font-semibold hover:bg-amber-400 hover:text-gray-900 transition-colors cursor-pointer"
                           >
-                            추가
+                            설정
                           </button>
                         </div>
                       </div>
@@ -1872,6 +1887,77 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
         {/* TAB 4: GITHUB DEPLOYMENT & DATA SYNC */}
         {activeTab === 'sync' && (
           <div className="space-y-6 animate-fadeIn">
+            {/* 데이터 백업 & 일괄 복구 카드 */}
+            <div className="rounded-xl border border-gray-200 bg-white p-5 space-y-4 shadow-sm">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                  💾 전체 웹사이트 데이터 백업 및 복원 (Remodeling / Backup & Restore)
+                </h4>
+                <span className="text-[10px] font-mono font-semibold text-gray-400 bg-gray-50 px-2 py-0.5 rounded border border-gray-150">
+                  JSON v1.0
+                </span>
+              </div>
+
+              <div className="text-xs text-gray-500 leading-relaxed font-sans space-y-2">
+                <p>
+                  사이트 구조 개편, 테마 변경 및 리모델링 작업을 하기 전에 <strong>현재 등록된 포트폴리오(공연 기록), 공연 관람 및 이력, 그리고 전체 사이트 디자인 설정 데이터</strong>를 PC에 안전하게 백업 파일로 보관하실 수 있습니다.
+                </p>
+                <p>
+                  현 프로젝트의 코드가 개편/수정된 후에도, 다운로드받은 이 백업 파일(<code>.json</code>)을 아래 [백업 파일 로드하기] 버튼을 통해 선택해주시면 <strong>단 한 번의 클릭만으로 모든 자료가 리마운트 복원되며 즉각 제적용</strong>됩니다.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                {/* Export Card */}
+                <div className="p-4 rounded-xl border border-dashed border-gray-200 hover:border-amber-400 transition-colors bg-gray-50 flex flex-col justify-between space-y-3">
+                  <div>
+                    <h5 className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                      📤 로컬 PC에 전체 백업 복사본 파일 생성하기
+                    </h5>
+                    <p className="text-[10.5px] text-gray-500 leading-relaxed mt-1">
+                      공연 사진/동영상 목록, 상세 이력 및 컬러/폰트 디자인 설정 데이터를 하나의 통합 백업용 파일로 패킹하여 다운로드합니다.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleExportBackup}
+                    className="w-full inline-flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-gray-950 font-bold px-4 py-2.5 rounded-lg shadow-sm transition-all text-xs cursor-pointer"
+                  >
+                    📥 전체 데이터 백업 파일 생성 & 다운로드
+                  </button>
+                </div>
+
+                {/* Import Card */}
+                <div className="p-4 rounded-xl border border-dashed border-gray-200 hover:border-amber-550 transition-colors bg-gray-50 flex flex-col justify-between space-y-3 relative">
+                  <div>
+                    <h5 className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                      📥 작성해 둔 백업 파일 선택하여 전체 복원하기
+                    </h5>
+                    <p className="text-[10.5px] text-gray-500 leading-relaxed mt-1">
+                      이전에 내보내어 소장하고 계신 백업 복사본 파일(<code>.json</code>)을 가져와 현재 실시간 데이터로 원터치 복원합니다.
+                    </p>
+                  </div>
+                  
+                  <label className="w-full inline-flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-950 text-white font-bold px-4 py-2.5 rounded-lg shadow-sm transition-all text-xs cursor-pointer text-center">
+                    {isImportLoading ? (
+                      <span className="flex items-center gap-1">
+                        <RefreshCw className="h-3 w-3 animate-spin animate-infinite duration-1000" /> 복원 데이터 마이그레이션 중...
+                      </span>
+                    ) : (
+                      "📂 백업 백사본 JSON 파일 로드하기"
+                    )}
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={handleImportBackup}
+                      disabled={isImportLoading}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+            </div>
+
             <div className="rounded-xl border border-amber-250 bg-amber-50/20 p-5 space-y-4">
               <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
                 💡 깃허브 배포 시 포트폴리오 정보를 영구 보존하는 방법

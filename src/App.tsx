@@ -89,23 +89,84 @@ export default function App() {
           console.log("Firebase config resides on default placeholder or is invalid. Engaging local storage persistence.");
         }
 
-        // --- Items State Recovery ---
+        // --- Items State Recovery & Auto-Split Multiple Images Migration ---
+        let loadedItemsList: PortfolioItem[] = [];
         if (firebaseItems && firebaseItems.length > 0) {
-          setItems(firebaseItems);
-          // Sync to localStorage
-          localStorage.setItem('sallys_items', JSON.stringify(firebaseItems));
+          loadedItemsList = firebaseItems;
         } else {
           // If empty/failed on Firebase, try to recover from localStorage
           const localSaved = localStorage.getItem('sallys_items');
           if (localSaved) {
             try {
-              setItems(JSON.parse(localSaved));
+              loadedItemsList = JSON.parse(localSaved);
             } catch {
-              setItems(INITIAL_ITEMS);
+              loadedItemsList = INITIAL_ITEMS;
             }
           } else {
-            setItems(INITIAL_ITEMS);
+            loadedItemsList = INITIAL_ITEMS;
           }
+        }
+
+        // Check and split any items with multiple different images into separate independent posts
+        let hasSplit = false;
+        const migratedItems: PortfolioItem[] = [];
+
+        for (const item of loadedItemsList) {
+          const uniqueUrls = Array.from(new Set(
+            [item.imageUrl, ...(item.imageUrls || [])].filter(url => !!url)
+          ));
+
+          if (uniqueUrls.length > 1) {
+            hasSplit = true;
+            // The first image remains as the main cover photo for the original item
+            const primaryUrl = item.imageUrl || uniqueUrls[0];
+            const originalItemCopied: PortfolioItem = {
+              ...item,
+              imageUrl: primaryUrl,
+              imageUrls: [primaryUrl],
+            };
+            migratedItems.push(originalItemCopied);
+
+            if (validConfig) {
+              await savePortfolioItemToFirebase(originalItemCopied).catch(e => console.error("Firebase update split original failed:", e));
+            }
+
+            // Split all subsequent images into their own separate entries
+            const remainingUrls = uniqueUrls.filter(url => url !== primaryUrl);
+            for (let i = 0; i < remainingUrls.length; i++) {
+              const extraUrl = remainingUrls[i];
+              const newItem: PortfolioItem = {
+                ...item,
+                id: `${item.id}-extra-${i + 1}-${Date.now()}`,
+                title: `${item.title} (추가 기록 ${i + 2})`,
+                imageUrl: extraUrl,
+                imageUrls: [extraUrl],
+                youtubeUrl: '', // Reset YouTube so it is purely a photo post
+                order: (item.order ?? 0) + (i + 1) * 0.01 // Squeeze in sequence so they cluster together
+              };
+              migratedItems.push(newItem);
+
+              if (validConfig) {
+                await savePortfolioItemToFirebase(newItem).catch(e => console.error("Firebase save split extra failed:", e));
+              }
+            }
+          } else {
+            migratedItems.push({
+              ...item,
+              imageUrls: item.imageUrl ? [item.imageUrl] : []
+            });
+          }
+        }
+
+        if (hasSplit) {
+          console.log("Migration: Split multiple images into separate single-image portfolio posts.");
+          loadedItemsList = migratedItems;
+          localStorage.setItem('sallys_items', JSON.stringify(migratedItems));
+        }
+
+        setItems(loadedItemsList);
+        if (!hasSplit) {
+          localStorage.setItem('sallys_items', JSON.stringify(loadedItemsList));
         }
 
         // --- History State Recovery ---
@@ -328,17 +389,10 @@ export default function App() {
           <nav className="hidden items-center gap-6 text-xs font-semibold text-gray-500 sm:flex">
             <a 
               href="#showcase" 
-              onClick={() => setMediaType('photo')}
-              className={`hover:text-gray-900 transition-colors ${mediaType === 'photo' ? 'text-amber-500 font-bold' : ''}`}
+              onClick={() => setMediaType('all')}
+              className={`hover:text-gray-900 transition-colors ${mediaType === 'all' ? 'text-amber-500 font-bold' : ''}`}
             >
-              사진 포트폴리오
-            </a>
-            <a 
-              href="#showcase" 
-              onClick={() => setMediaType('video')}
-              className={`hover:text-gray-900 transition-colors ${mediaType === 'video' ? 'text-amber-500 font-bold' : ''}`}
-            >
-              영상 포트폴리오
+              아카이브 (Archive)
             </a>
             <a 
               href="#history" 
@@ -463,19 +517,18 @@ export default function App() {
         <div className="mx-auto max-w-6xl px-6">
           <div className="mb-10 space-y-2">
             <span className="text-[10px] font-mono font-bold tracking-widest text-[#666666] uppercase flex items-center gap-1">
-              <Compass className="h-3.5 w-3.5" /> SELECTED PORTFOLIO WORKS
+              <Compass className="h-3.5 w-3.5" /> ARCHIVE IN FOCUS
             </span>
             <h2 className="text-2xl font-black tracking-tight text-[#1A1A1A] sm:text-3xl font-custom-heading">
-              공연의 기록
+              아카이브 (Archive)
             </h2>
             <p className="text-xs text-[#666666] max-w-xl whitespace-pre-line leading-relaxed">
-              'Sally's Law'는 공연장에서 느끼는 순간들을 기록하여,{"\n"}
-              이 기록이 누군가에게 감동으로 전달되길 바라는 마음까지 기록을 남기고 있습니다.{"\n"}
-              클릭 시 사진 및 비디오를 보실 수 있습니다.
+              'Sally's Law'는 무대의 생생한 감동과 아티스트의 찰나의 표정, 그 속에 담긴 뜨거운 열기를 정성스럽게 기록하여 보관합니다.{"\n"}
+              카테고리 탭을 통해 다양한 사진 및 비디오를 한눈에 보실 수 있습니다.
             </p>
           </div>
 
-           <PortfolioGrid
+          <PortfolioGrid
             items={items}
             onItemClick={(item) => setSelectedItem(item)}
             mediaType={mediaType}
@@ -569,19 +622,10 @@ export default function App() {
                   <li>
                     <a 
                       href="#showcase" 
-                      onClick={() => setMediaType('photo')}
+                      onClick={() => setMediaType('all')}
                       className="hover:text-white transition-colors"
                     >
-                      사진 포트폴리오
-                    </a>
-                  </li>
-                  <li>
-                    <a 
-                      href="#showcase" 
-                      onClick={() => setMediaType('video')}
-                      className="hover:text-white transition-colors"
-                    >
-                      영상 포트폴리오
+                      아카이브 (Archive)
                     </a>
                   </li>
                   <li>
