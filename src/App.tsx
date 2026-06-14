@@ -112,6 +112,12 @@ export default function App() {
         const migratedItems: PortfolioItem[] = [];
 
         for (const item of loadedItemsList) {
+          // Normalize legacy objects to include workType
+          if (!item.workType) {
+            const legacyClient = (item as any).client || '';
+            item.workType = legacyClient ? (legacyClient.includes('샐리') ? '개인 작업' : '프로젝트 작업') : '개인 작업';
+          }
+
           const uniqueUrls = Array.from(new Set(
             [item.imageUrl, ...(item.imageUrls || [])].filter(url => !!url)
           ));

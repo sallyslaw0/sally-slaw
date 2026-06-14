@@ -12,7 +12,7 @@ export interface PortfolioItem {
   imageUrl: string;
   imageUrls?: string[]; // e.g., list of images for gallery
   youtubeUrl?: string; // e.g., https://www.youtube.com/watch?v=dQw4w9WgXcQ or https://youtu.be/...
-  client: string;
+  workType: string;
   year: string;
   tags: string[];
   order?: number;

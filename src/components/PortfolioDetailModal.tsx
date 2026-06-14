@@ -105,7 +105,7 @@ export default function PortfolioDetailModal({ item, onClose }: PortfolioDetailM
                   {item.title}
                 </h2>
                 <p className="text-xs font-mono font-bold text-amber-600/90 tracking-wide">
-                  {item.year} &middot; {item.client}
+                  {item.year} &middot; {item.workType}
                 </p>
                 {item.summary && (
                   <p className="text-xs text-gray-400 italic">

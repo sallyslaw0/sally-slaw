@@ -727,7 +727,7 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
       imageUrl: initialImg,
       imageUrls: initialImg ? [initialImg] : [],
       youtubeUrl: '',
-      client: '신규 아티스트',
+      workType: '개인 작업',
       year: new Date().getFullYear().toString(),
       tags: mode === 'photo' ? ['Design', 'Branding'] : ['Video', 'Motion']
     });
@@ -779,7 +779,7 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
       imageUrl: finalImageUrl,
       imageUrls: finalImageUrls,
       youtubeUrl: finalYoutubeUrl,
-      client: editingItem.client || '자체 프로젝트',
+      workType: editingItem.workType || (editingItem as any).client || '개인 작업',
       year: editingItem.year || '2026',
       tags: Array.isArray(editingItem.tags) ? editingItem.tags : []
     };
@@ -1146,14 +1146,15 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
 
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">아티스트 명</label>
-                        <input
-                          type="text"
-                          placeholder="예: 루미너리 서울"
-                          value={editingItem.client || ''}
-                          onChange={(e) => setEditingItem({ ...editingItem, client: e.target.value })}
+                        <label className="block text-xs font-medium text-gray-500 mb-1">작업 종류</label>
+                        <select
+                          value={editingItem.workType || '개인 작업'}
+                          onChange={(e) => setEditingItem({ ...editingItem, workType: e.target.value })}
                           className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs focus:border-amber-400 focus:outline-hidden"
-                        />
+                        >
+                          <option value="개인 작업">개인 작업</option>
+                          <option value="프로젝트 작업">프로젝트 작업</option>
+                        </select>
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-500 mb-1">작업 연도</label>
@@ -1415,7 +1416,7 @@ export const INITIAL_HISTORY: HistoryItem[] = ${formattedHistory};
                         </span>
                       </td>
                       <td className="px-4 py-3 font-mono text-[10px]">
-                        <div>{item.client}</div>
+                        <div className="font-sans font-medium text-gray-700">{item.workType}</div>
                         <div className="text-gray-400 mt-0.5">{item.year}</div>
                       </td>
                       <td className="px-4 py-3 text-right space-x-1">

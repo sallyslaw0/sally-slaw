@@ -66,7 +66,7 @@ export default function PortfolioGrid({ items, onItemClick, mediaType, setMediaT
     const matchesSearch = 
       item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.summary.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.client.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.workType.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
     
     return matchesCategory && matchesSearch;

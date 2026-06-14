@@ -227,7 +227,7 @@ export async function fetchPortfolioItemsFromFirebase(): Promise<PortfolioItem[]
         imageUrl: data.imageUrl || '',
         imageUrls: data.imageUrls || (data.imageUrl ? [data.imageUrl] : []),
         youtubeUrl: data.youtubeUrl || '',
-        client: data.client || '',
+        workType: data.workType || (data.client ? (data.client.includes('샐리') ? '개인 작업' : '프로젝트 작업') : '개인 작업'),
         year: data.year || '',
         tags: data.tags || [],
         order: typeof data.order === 'number' ? data.order : 0,
@@ -261,7 +261,7 @@ export async function savePortfolioItemToFirebase(item: PortfolioItem): Promise<
       imageUrl: item.imageUrl,
       imageUrls: item.imageUrls || [item.imageUrl],
       youtubeUrl: item.youtubeUrl || '',
-      client: item.client,
+      workType: item.workType,
       year: item.year,
       tags: item.tags || [],
       order: typeof item.order === 'number' ? item.order : 0

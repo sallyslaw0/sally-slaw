@@ -56,7 +56,7 @@ export default function PortfolioCard({ item, onClick }: PortfolioCardProps) {
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] font-mono tracking-widest text-[#666666] uppercase">
-              {item.client} • {item.year}
+              {item.workType} • {item.year}
             </span>
             <span className="text-gray-400 group-hover:text-[var(--accent-color)] transition-colors duration-300">
               <ArrowUpRight className="h-4 w-4" />
